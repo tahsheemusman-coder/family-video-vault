@@ -1,1 +1,413 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Family Media Vault - Telegram Mini App</title>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            telegram: {
+              bg: '#17212b',
+              card: '#242f3d',
+              accent: '#64b5ef',
+              hover: '#2b394a',
+              text: '#f5f5f5',
+              subtext: '#7f91a4'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Custom scrollbar for tag pill navigation */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-telegram-bg text-telegram-text antialiased min-h-screen flex flex-col font-sans select-none">
 
+  <!-- Header Header & Search -->
+  <header class="sticky top-0 z-30 bg-telegram-bg/95 backdrop-blur-md border-b border-white/5 p-4 space-y-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="p-2 bg-telegram-accent/10 rounded-xl text-telegram-accent">
+          <i data-lucide="clapperboard" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base text-white tracking-wide">Family Video Vault</h1>
+          <p class="text-xs text-telegram-subtext" id="stats-counter">Loading media archive...</p>
+        </div>
+      </div>
+      <button id="add-video-btn" onclick="openAddModal()" class="p-2 rounded-xl bg-telegram-accent text-telegram-bg font-semibold text-xs flex items-center gap-1 active:scale-95 transition-transform shadow-lg shadow-telegram-accent/20">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Add Link</span>
+      </button>
+    </div>
+
+    <!-- Search Bar Input -->
+    <div class="relative">
+      <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-telegram-subtext"></i>
+      <input 
+        type="text" 
+        id="search-input"
+        placeholder="Search titles or tags (e.g., #mom, birthday)..." 
+        class="w-full bg-telegram-card text-sm text-white pl-9 pr-8 py-2.5 rounded-xl border border-white/5 focus:outline-none focus:border-telegram-accent/50 placeholder-telegram-subtext transition-all"
+        oninput="filterMedia()"
+      />
+      <button id="clear-search" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-telegram-subtext hover:text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Tag Pills Filter Horizontal Scroll -->
+    <div class="flex gap-2 overflow-x-auto no-scrollbar py-1 text-xs" id="tags-container">
+      <!-- Tag pills injected dynamically -->
+    </div>
+  </header>
+
+  <!-- Video Grid Main Section -->
+  <main class="flex-1 p-4">
+    <!-- Grid -->
+    <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Video Cards injected dynamically -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden flex flex-col items-center justify-center text-center py-16 px-4">
+      <div class="p-4 bg-telegram-card rounded-full mb-3 text-telegram-subtext">
+        <i data-lucide="search-x" class="w-8 h-8"></i>
+      </div>
+      <h3 class="text-base font-semibold text-white">No videos found</h3>
+      <p class="text-xs text-telegram-subtext mt-1 max-w-xs">Try adjusting your search query or selecting a different tag filter.</p>
+      <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-telegram-card text-telegram-accent border border-telegram-accent/20 rounded-xl text-xs font-medium">Reset Filters</button>
+    </div>
+  </main>
+
+  <!-- Add Video Modal -->
+  <div id="add-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden transition-opacity">
+    <div class="bg-telegram-card w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 border border-white/10 space-y-4 animate-in slide-in-from-bottom duration-200">
+      <div class="flex items-center justify-between pb-2 border-b border-white/5">
+        <h2 class="font-bold text-white text-base">Index New Video</h2>
+        <button onclick="closeAddModal()" class="text-telegram-subtext hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-telegram-subtext block mb-1">Video Title / Event</label>
+          <input type="text" id="modal-title" placeholder="e.g., Mom's Surprise Birthday Party" class="w-full bg-telegram-bg text-sm text-white px-3 py-2 rounded-xl border border-white/10 focus:outline-none focus:border-telegram-accent" />
+        </div>
+        <div>
+          <label class="text-xs text-telegram-subtext block mb-1">Telegram Message Link</label>
+          <input type="text" id="modal-link" placeholder="https://t.me/c/123456789/42" class="w-full bg-telegram-bg text-sm text-white px-3 py-2 rounded-xl border border-white/10 focus:outline-none focus:border-telegram-accent" />
+        </div>
+        <div>
+          <label class="text-xs text-telegram-subtext block mb-1">Hashtags (space separated)</label>
+          <input type="text" id="modal-tags" placeholder="#mother #birthday #2025" class="w-full bg-telegram-bg text-sm text-white px-3 py-2 rounded-xl border border-white/10 focus:outline-none focus:border-telegram-accent" />
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-2">
+        <button onclick="closeAddModal()" class="flex-1 py-2.5 rounded-xl border border-white/10 text-xs font-semibold text-telegram-subtext hover:bg-white/5">Cancel</button>
+        <button onclick="saveNewVideo()" class="flex-1 py-2.5 rounded-xl bg-telegram-accent text-telegram-bg text-xs font-semibold shadow-lg shadow-telegram-accent/20">Save Index</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-telegram-card border border-telegram-accent/30 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+    <i data-lucide="info" class="w-4 h-4 text-telegram-accent"></i>
+    <span id="toast-msg">Notification</span>
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // Telegram WebApp SDK Initialization
+    // -------------------------------------------------------------
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand(); // Expand web app view to full height inside Telegram
+      // Set theme header color to match app background
+      if (tg.setHeaderColor) tg.setHeaderColor('#17212b');
+      if (tg.setBackgroundColor) tg.setBackgroundColor('#17212b');
+    }
+
+    // -------------------------------------------------------------
+    // Mock Media Database (Stored in localStorage for demo)
+    // -------------------------------------------------------------
+    const INITIAL_VIDEOS = [
+      {
+        id: 1,
+        title: "Mom's 50th Birthday Celebration & Cake Cutting",
+        tags: ["#mother", "#mom", "#birthday", "#family"],
+        date: "2024-11-12",
+        link: "https://t.me/telegram",
+        duration: "03:45",
+        thumbnail: "https://placehold.co/600x340/242f3d/64b5ef?text=Mom+Birthday+2024"
+      },
+      {
+        id: 2,
+        title: "Sister's Graduation Day Ceremony Speech",
+        tags: ["#sister", "#graduation", "#celebration"],
+        date: "2024-06-20",
+        link: "https://t.me/telegram",
+        duration: "05:12",
+        thumbnail: "https://placehold.co/600x340/242f3d/64b5ef?text=Sister+Graduation"
+      },
+      {
+        id: 3,
+        title: "Daughter's First Steps in the Park",
+        tags: ["#daughter", "#baby", "#milestone"],
+        date: "2023-09-14",
+        link: "https://t.me/telegram",
+        duration: "01:20",
+        thumbnail: "https://placehold.co/600x340/242f3d/64b5ef?text=Daughter+First+Steps"
+      },
+      {
+        id: 4,
+        title: "Family Summer Vacation Trip at Beach",
+        tags: ["#mother", "#sister", "#daughter", "#vacation"],
+        date: "2024-08-05",
+        link: "https://t.me/telegram",
+        duration: "12:30",
+        thumbnail: "https://placehold.co/600x340/242f3d/64b5ef?text=Summer+Vacation"
+      }
+    ];
+
+    let videos = JSON.parse(localStorage.getItem('tg_family_videos')) || INITIAL_VIDEOS;
+    let selectedTag = "ALL";
+
+    // -------------------------------------------------------------
+    // Application Initialization
+    // -------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTags();
+      renderVideos();
+      lucide.createIcons();
+    });
+
+    // Extract all unique tags across all videos
+    function getUniqueTags() {
+      const tagSet = new Set();
+      videos.forEach(v => v.tags.forEach(t => tagSet.add(t.toLowerCase())));
+      return Array.from(tagSet);
+    }
+
+    // Render tag filter pill UI
+    function renderTags() {
+      const container = document.getElementById('tags-container');
+      const uniqueTags = getUniqueTags();
+      
+      let html = `
+        <button onclick="selectTag('ALL')" class="px-3 py-1.5 rounded-xl font-medium transition-colors shrink-0 ${selectedTag === 'ALL' ? 'bg-telegram-accent text-telegram-bg' : 'bg-telegram-card text-telegram-subtext hover:text-white'}">
+          All Videos
+        </button>
+      `;
+
+      uniqueTags.forEach(tag => {
+        const isSelected = selectedTag === tag;
+        html += `
+          <button onclick="selectTag('${tag}') text-xs" class="px-3 py-1.5 rounded-xl font-medium transition-colors shrink-0 ${isSelected ? 'bg-telegram-accent text-telegram-bg' : 'bg-telegram-card text-telegram-subtext hover:text-white'}">
+            ${tag}
+          </button>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Filter and Render Video Cards Grid
+    function renderVideos() {
+      const grid = document.getElementById('video-grid');
+      const emptyState = document.getElementById('empty-state');
+      const searchVal = document.getElementById('search-input').value.toLowerCase().trim();
+      
+      const filtered = videos.filter(video => {
+        const matchesTag = selectedTag === 'ALL' || video.tags.map(t => t.toLowerCase()).includes(selectedTag);
+        const matchesSearch = !searchVal || 
+          video.title.toLowerCase().includes(searchVal) || 
+          video.tags.some(t => t.toLowerCase().includes(searchVal));
+        return matchesTag && matchesSearch;
+      });
+
+      document.getElementById('stats-counter').innerText = `${filtered.length} ${filtered.length === 1 ? 'video' : 'videos'} cataloged`;
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      grid.innerHTML = filtered.map(v => `
+        <div class="bg-telegram-card rounded-2xl overflow-hidden border border-white/5 hover:border-telegram-accent/30 transition-all flex flex-col justify-between group">
+          <div>
+            <!-- Thumbnail preview area -->
+            <div class="relative aspect-video bg-telegram-bg overflow-hidden">
+              <img src="${v.thumbnail}" alt="${v.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='https://placehold.co/600x340/242f3d/7f91a4?text=Video+Preview'" />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+              
+              <!-- Duration badge -->
+              <span class="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-md font-mono">
+                ${v.duration || '00:00'}
+              </span>
+
+              <!-- Date badge -->
+              <span class="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-telegram-subtext text-[10px] px-2 py-0.5 rounded-md">
+                ${v.date}
+              </span>
+            </div>
+
+            <!-- Content Details -->
+            <div class="p-3.5 space-y-2">
+              <h2 class="text-sm font-semibold text-white line-clamp-2 leading-snug">${escapeHtml(v.title)}</h2>
+              
+              <!-- Tags list -->
+              <div class="flex flex-wrap gap-1 pt-1">
+                ${v.tags.map(t => `<span onclick="selectTag('${t.toLowerCase()}'); event.stopPropagation();" class="text-[11px] text-telegram-accent bg-telegram-accent/10 px-2 py-0.5 rounded-md cursor-pointer hover:bg-telegram-accent/20 transition-colors">${t}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- Direct Play Button -->
+          <div class="p-3.5 pt-0">
+            <button onclick="openTelegramLink('${v.link}')" class="w-full py-2.5 px-3 rounded-xl bg-telegram-accent/10 hover:bg-telegram-accent text-telegram-accent hover:text-telegram-bg border border-telegram-accent/20 hover:border-transparent font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+              <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
+              <span>Play Video in Telegram</span>
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------
+    // Filtering Logic
+    // -------------------------------------------------------------
+    function filterMedia() {
+      const searchVal = document.getElementById('search-input').value.trim();
+      const clearBtn = document.getElementById('clear-search');
+      if (searchVal.length > 0) {
+        clearBtn.classList.remove('hidden');
+      } else {
+        clearBtn.classList.add('hidden');
+      }
+      renderVideos();
+    }
+
+    function selectTag(tag) {
+      selectedTag = tag;
+      renderTags();
+      renderVideos();
+    }
+
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      document.getElementById('clear-search').classList.add('hidden');
+      renderVideos();
+    }
+
+    function resetFilters() {
+      selectedTag = 'ALL';
+      document.getElementById('search-input').value = '';
+      document.getElementById('clear-search').classList.add('hidden');
+      renderTags();
+      renderVideos();
+    }
+
+    // -------------------------------------------------------------
+    // Telegram Navigation Integration
+    // -------------------------------------------------------------
+    function openTelegramLink(link) {
+      if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(link);
+      } else {
+        window.open(link, '_blank');
+      }
+      showToast("Redirecting to video message...");
+    }
+
+    // -------------------------------------------------------------
+    // Modal & Video Index Creation Logic
+    // -------------------------------------------------------------
+    function openAddModal() {
+      document.getElementById('add-modal').classList.remove('hidden');
+    }
+
+    function closeAddModal() {
+      document.getElementById('add-modal').classList.add('hidden');
+      document.getElementById('modal-title').value = '';
+      document.getElementById('modal-link').value = '';
+      document.getElementById('modal-tags').value = '';
+    }
+
+    function saveNewVideo() {
+      const title = document.getElementById('modal-title').value.trim();
+      const link = document.getElementById('modal-link').value.trim();
+      const tagsInput = document.getElementById('modal-tags').value.trim();
+
+      if (!title || !link) {
+        showToast("Please fill in both the title and link.");
+        return;
+      }
+
+      // Parse tags into array ensuring hashtag format
+      const tags = tagsInput.split(/\s+/).filter(t => t.length > 0).map(t => t.startsWith('#') ? t : `#${t}`);
+      if (tags.length === 0) tags.push("#family");
+
+      const newVideo = {
+        id: Date.now(),
+        title: title,
+        tags: tags,
+        date: new Date().toISOString().split('T')[0],
+        link: link,
+        duration: "TG Video",
+        thumbnail: `https://placehold.co/600x340/242f3d/64b5ef?text=${encodeURIComponent(title.slice(0, 18))}`
+      };
+
+      videos.unshift(newVideo);
+      localStorage.setItem('tg_family_videos', JSON.stringify(videos));
+
+      closeAddModal();
+      renderTags();
+      renderVideos();
+      showToast("Video link successfully indexed!");
+    }
+
+    // -------------------------------------------------------------
+    // Toast Helper
+    // -------------------------------------------------------------
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').innerText = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2500);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
