@@ -54,9 +54,7 @@
 
     <script>
         const defaultVideos = [
-            { id: 1, title: "Mom's 50th Birthday Celebration", url: "https://t.me/", date: "2024-11-12", tags: ["#mother", "#mom", "#birthday", "#family"] },
-            { id: 2, title: "Sister Graduation", url: "https://t.me/", date: "2024-06-20", tags: ["#sister", "#graduation", "#family"] },
-            { id: 3, title: "Daughter First Steps", url: "https://t.me/", date: "2023-09-14", tags: ["#daughter", "#family"] }
+            { id: 1, title: "Mom's 50th Birthday Celebration", url: "https://t.me/", date: "2024-11-12", tags: ["#mother", "#mom", "#birthday", "#family"] }
         ];
 
         let videos = JSON.parse(localStorage.getItem('family_videos')) || defaultVideos;
@@ -96,7 +94,7 @@
                     <div class="flex flex-wrap gap-1.5 mb-3">
                         ${v.tags.map(t => `<span class="bg-slate-800 text-blue-400 text-[10px] px-2 py-0.5 rounded-md font-medium">${t}</span>`).join('')}
                     </div>
-                    <a href="${v.url}" target="_blank" onclick="Telegram.WebApp.openTelegramLink('${v.url}')" class="block w-full bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-200 text-center py-2.5 rounded-xl text-xs font-semibold transition">
+                    <a href="${v.url}" target="_blank" onclick="window.open('${v.url}', '_blank'); return false;" class="block w-full bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-200 text-center py-2.5 rounded-xl text-xs font-semibold transition">
                         ▶ Play Video in Telegram
                     </a>
                 </div>
