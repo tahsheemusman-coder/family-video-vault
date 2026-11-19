@@ -188,7 +188,7 @@
   </header>
 
   <div class="controls">
-    <input type="search" id="searchBox" placeholder="Search titles or tags (e.g. #mom, birthday)" aria-label="Search videos" autocomplete="off">
+    <input type="search" id="searchBox" placeholder="Search titles or tags (e.g. #vacation, birthday)" aria-label="Search videos" autocomplete="off">
     <select id="sortSel" aria-label="Sort videos">
       <option value="new">Newest</option>
       <option value="old">Oldest</option>
@@ -217,7 +217,7 @@
     <h2 id="formTitle">Add video link</h2>
     <div>
       <label for="newTitle">Video title</label>
-      <input type="text" id="newTitle" maxlength="120" placeholder="e.g. Mom's birthday" autocomplete="off">
+      <input type="text" id="newTitle" maxlength="120" placeholder="e.g. Summer vacation 2024" autocomplete="off">
     </div>
     <div>
       <label for="newUrl">Telegram message link</label>
@@ -225,7 +225,7 @@
     </div>
     <div>
       <label for="newTags">Hashtags</label>
-      <input type="text" id="newTags" maxlength="300" autocapitalize="none" autocomplete="off" placeholder="#mother #mom #birthday">
+      <input type="text" id="newTags" maxlength="300" autocapitalize="none" autocomplete="off" placeholder="#vacation #family #2024">
     </div>
     <p id="formError" class="msg err" role="alert"></p>
     <div class="row">
@@ -246,11 +246,11 @@
     <p class="muted small" style="margin-top:.4rem">
       Bulk format (one video per block):
     </p>
-    <pre class="muted small" style="background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;overflow-x:auto;font-size:11px;line-height:1.35;margin:0 0 .5rem">https://t.me/c/4372430500/379
-Sashacurves When Mom Came to Stay
+    <pre class="muted small" style="background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;overflow-x:auto;font-size:11px;line-height:1.35;margin:0 0 .5rem">https://t.me/c/1234567890/42
+Family picnic highlights
 
-https://t.me/c/4372430500/375
-Sashacurves Temptation Vacation 2</pre>
+https://t.me/c/1234567890/57
+Birthday party compilation</pre>
     <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Paste backup JSON or bulk video list here..."></textarea>
     <p id="backupMsg" class="msg" role="status"></p>
     <div class="row">
@@ -619,28 +619,24 @@ Sashacurves Temptation Vacation 2</pre>
     try { ok = document.execCommand('copy'); } catch {}
     backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
   }
-  // Auto-generate tags from title keywords
+  // Generate tags from significant words in the title (fully generic)
   function autoTags(title) {
-    const t = String(title || '').toLowerCase();
-    const tags = new Set();
-    if (/mom|mommy|mother|mama/.test(t)) tags.add('#mom');
-    if (/step\s*mom|stepmom|step-mother/.test(t)) tags.add('#stepmom');
-    if (/sister|\bsis\b/.test(t)) tags.add('#sister');
-    if (/aunt/.test(t)) tags.add('#aunt');
-    if (/impregnat|breed|pregnant|repopulation/.test(t)) tags.add('#breeding');
-    if (/cuck/.test(t)) tags.add('#cuckold');
-    if (/free[\s-]?use/.test(t)) tags.add('#freeuse');
-    if (/\bjoi\b/.test(t)) tags.add('#joi');
-    if (/blackmail/.test(t)) tags.add('#blackmail');
-    if (/reluctant|seduc/.test(t)) tags.add('#reluctant');
-    if (/vacation|holiday|cruise|bahama/.test(t)) tags.add('#vacation');
-    if (/christmas|xmas/.test(t)) tags.add('#christmas');
-    if (/halloween/.test(t)) tags.add('#halloween');
-    if (/family|consanguin/.test(t)) tags.add('#family');
-    if (/blowjob|\bbj\b|facial|oral/.test(t)) tags.add('#blowjob');
-    if (/anal/.test(t)) tags.add('#anal');
-    if (!tags.size) tags.add('#family');
-    return [...tags].slice(0, 8);
+    const stop = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
+    const words = String(title || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w));
+    const seen = new Set();
+    const tags = [];
+    for (const w of words) {
+      if (seen.has(w)) continue;
+      seen.add(w);
+      tags.push('#' + w);
+      if (tags.length >= 6) break;
+    }
+    if (!tags.length) tags.push('#video');
+    return tags;
   }
 
   // Parse bulk plain-text format:
