@@ -235,12 +235,23 @@
   </div>
 </div>
 
-<!-- Backup -->
+<!-- Backup / Bulk Import -->
 <div id="backupModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="backupTitle" hidden>
   <div class="sheet">
-    <h2 id="backupTitle">Backup</h2>
-    <p class="muted small">Copy this text and keep it somewhere safe. To restore, paste a backup below and tap Import. Existing links are never overwritten.</p>
-    <textarea id="backupText" spellcheck="false" aria-label="Backup data"></textarea>
+    <h2 id="backupTitle">Backup &amp; Bulk Import</h2>
+    <p class="muted small">
+      <strong>Backup:</strong> Copy the JSON below to save your library.<br>
+      <strong>Import:</strong> Paste either a previous backup <em>or</em> a bulk list of videos.
+    </p>
+    <p class="muted small" style="margin-top:.4rem">
+      Bulk format (one video per block):
+    </p>
+    <pre class="muted small" style="background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;overflow-x:auto;font-size:11px;line-height:1.35;margin:0 0 .5rem">https://t.me/c/4372430500/379
+Sashacurves When Mom Came to Stay
+
+https://t.me/c/4372430500/375
+Sashacurves Temptation Vacation 2</pre>
+    <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Paste backup JSON or bulk video list here..."></textarea>
     <p id="backupMsg" class="msg" role="status"></p>
     <div class="row">
       <button id="copyBtn" class="btn ghost" type="button">Copy</button>
@@ -608,25 +619,118 @@
     try { ok = document.execCommand('copy'); } catch {}
     backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
   }
+  // Auto-generate tags from title keywords
+  function autoTags(title) {
+    const t = String(title || '').toLowerCase();
+    const tags = new Set();
+    if (/mom|mommy|mother|mama/.test(t)) tags.add('#mom');
+    if (/step\s*mom|stepmom|step-mother/.test(t)) tags.add('#stepmom');
+    if (/sister|\bsis\b/.test(t)) tags.add('#sister');
+    if (/aunt/.test(t)) tags.add('#aunt');
+    if (/impregnat|breed|pregnant|repopulation/.test(t)) tags.add('#breeding');
+    if (/cuck/.test(t)) tags.add('#cuckold');
+    if (/free[\s-]?use/.test(t)) tags.add('#freeuse');
+    if (/\bjoi\b/.test(t)) tags.add('#joi');
+    if (/blackmail/.test(t)) tags.add('#blackmail');
+    if (/reluctant|seduc/.test(t)) tags.add('#reluctant');
+    if (/vacation|holiday|cruise|bahama/.test(t)) tags.add('#vacation');
+    if (/christmas|xmas/.test(t)) tags.add('#christmas');
+    if (/halloween/.test(t)) tags.add('#halloween');
+    if (/family|consanguin/.test(t)) tags.add('#family');
+    if (/blowjob|\bbj\b|facial|oral/.test(t)) tags.add('#blowjob');
+    if (/anal/.test(t)) tags.add('#anal');
+    if (!tags.size) tags.add('#family');
+    return [...tags].slice(0, 8);
+  }
+
+  // Parse bulk plain-text format:
+  // https://t.me/c/.../123
+  // Video Title Here
+  function parseBulkText(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim());
+    const items = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line) { i++; continue; }
+      const url = normalizeTgUrl(line);
+      if (url) {
+        let title = '';
+        let j = i + 1;
+        while (j < lines.length && !lines[j]) j++;
+        if (j < lines.length && !normalizeTgUrl(lines[j])) {
+          title = lines[j].slice(0, TITLE_MAX);
+          i = j + 1;
+        } else {
+          i++;
+        }
+        if (title) items.push({ url, title, tags: autoTags(title) });
+        else i++;
+      } else {
+        i++;
+      }
+    }
+    return items;
+  }
+
   async function importBackup() {
-    let data;
-    try { data = JSON.parse($('backupText').value); } catch { return backupMsg('This text is not valid JSON.', true); }
-    const list = Array.isArray(data) ? data : (data && Array.isArray(data.videos) ? data.videos : null);
-    if (!list) return backupMsg('No videos found in this backup.', true);
+    const rawText = $('backupText').value.trim();
+    if (!rawText) return backupMsg('Paste a backup JSON or a bulk list of videos first.', true);
+
+    let list = null;
+
+    // Try JSON backup first
+    try {
+      const data = JSON.parse(rawText);
+      list = Array.isArray(data) ? data : (data && Array.isArray(data.videos) ? data.videos : null);
+    } catch {}
+
+    // Fallback to bulk plain-text parser
+    if (!list) {
+      list = parseBulkText(rawText);
+      if (!list.length) {
+        return backupMsg('Could not find any videos. Use a backup JSON or the bulk format shown above.', true);
+      }
+    }
 
     const seen = new Set(state.videos.map(v => urlKey(v.url)));
     const ids = new Set(state.videos.map(v => v.id));
     let added = 0;
+    let skipped = 0;
+
     for (const raw of list) {
-      const e = normalizeEntry(raw);
-      if (!e || seen.has(urlKey(e.url))) continue;
+      let e;
+      if (raw && raw.url && raw.title) {
+        e = normalizeEntry({
+          id: raw.id,
+          title: raw.title,
+          url: raw.url,
+          tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : autoTags(raw.title),
+          date: raw.date,
+          created: raw.created
+        });
+      } else {
+        e = normalizeEntry(raw);
+      }
+      if (!e) { skipped++; continue; }
+      if (seen.has(urlKey(e.url))) { skipped++; continue; }
       if (ids.has(e.id)) e.id = newId();
-      try { await commitSave(e); seen.add(urlKey(e.url)); ids.add(e.id); added++; }
-      catch { break; }
+      try {
+        await commitSave(e);
+        seen.add(urlKey(e.url));
+        ids.add(e.id);
+        added++;
+      } catch {
+        break;
+      }
     }
+
     render();
-    const skipped = list.length - added;
-    backupMsg(`Added ${added} of ${list.length}. ${skipped} skipped (duplicates, invalid, or could not be saved).`, added === 0 && skipped > 0);
+    const total = list.length;
+    backupMsg(
+      `Added ${added} of ${total}. ${skipped} skipped (duplicates or invalid).`,
+      added === 0 && skipped > 0
+    );
     if (added) haptic('success');
   }
 
