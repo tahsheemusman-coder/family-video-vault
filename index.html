@@ -68,6 +68,8 @@
   }
   .btn.primary { background: linear-gradient(135deg, rgba(63,155,255,.95), rgba(91,92,255,.88)); color: var(--accent-text); border-color: rgba(255,255,255,.24); }
   .btn.ghost { background: rgba(255,255,255,.08); color: var(--text); }
+  .btn.danger { background: rgba(255,125,141,.16); color: var(--danger); border-color: rgba(255,125,141,.35); }
+  .btn.danger:hover { background: rgba(255,125,141,.26); }
   .btn:disabled { opacity: .5; cursor: default; }
 
   .controls { display: flex; gap: .5rem; margin-bottom: .65rem; }
@@ -158,6 +160,9 @@
     box-shadow: 0 12px 35px rgba(0,0,0,.3); transition: opacity .18s ease, transform .18s ease;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) {
+    .toast { transition: none; }
+  }
 
   .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; padding: .8rem; background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .sheet {
@@ -168,8 +173,8 @@
   .sheet h2 { margin: 0; font-size: 1.1rem; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: .25rem; }
   textarea { min-height: 11rem; resize: vertical; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
-  .row { display: flex; gap: .5rem; }
-  .row .btn { flex: 1; min-height: 44px; font-size: 14px; }
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .row .btn { flex: 1 1 0; min-width: 6.5rem; min-height: 44px; font-size: 14px; }
   .msg { font-size: 12px; min-height: 1.2em; }
   .msg.err { color: var(--danger); }
 </style>
@@ -260,6 +265,7 @@ Birthday party compilation</pre>
     <div class="row">
       <button id="copyBtn" class="btn ghost" type="button">Copy</button>
       <button id="importBtn" class="btn primary" type="button">Import</button>
+      <button id="clearBtn" class="btn danger" type="button">Clear</button>
     </div>
     <button id="backupClose" class="btn ghost" type="button">Close</button>
   </div>
@@ -282,16 +288,19 @@ Birthday party compilation</pre>
   const LS_PENDING = 'vv_pending';         // queue of edits/deletes made while cloud was unreachable
   const CS_PREFIX = 'v_';                  // one CloudStorage key per video
   const META_KEY = 'meta_init';            // marks that the one-time local -> cloud migration happened
-  const CS_MAX = 1000;                     // CloudStorage allows 1024 keys
+  const CS_RESERVED = 24;                  // keys kept free for meta + headroom
+  const CS_MAX = 1000 - CS_RESERVED;       // max number of video entries we'll store
   const CS_TIMEOUT = 8000;                 // ms before a CloudStorage call is treated as failed
   const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30, CHIP_MAX = 40;
-  // https://t.me/c/<id>/<msg>, https://t.me/<user>/<msg>, optionally with a topic segment
-  const MSG_PATH = /^\/(?:c\/\d+|[A-Za-z][A-Za-z0-9_]{3,})(?:\/\d+){1,2}\/?$/;
+  // https://t.me/c/<id>/<msg>, https://t.me/<user>/<msg>, optionally with a topic segment.
+  // Usernames are 5-32 chars, start with a letter, letters/digits/underscore only.
+  const MSG_PATH = /^\/(?:c\/\d+|[A-Za-z][A-Za-z0-9_]{4,31})(?:\/\d+){1,2}\/?$/;
 
   const cloudApi = has('6.9') && tg.CloudStorage ? tg.CloudStorage : null;
   let cloud = cloudApi;
 
   const cs = (method, ...args) => new Promise((resolve, reject) => {
+    if (!cloud) return reject(new Error('no-cloud'));
     const timer = setTimeout(() => reject(new Error('timeout')), CS_TIMEOUT);
     try {
       cloud[method](...args, (err, result) => {
@@ -406,8 +415,7 @@ Birthday party compilation</pre>
   }
 
   // Pending queue: explicit {t:'set', e:entry} / {t:'del', id} operations recorded while the
-  // cloud was unreachable. Replayed on the next successful load, so offline edits win over the
-  // stale cloud copy and offline deletes stay deleted.
+  // cloud was unreachable or when a cloud write failed. Replayed on the next successful load.
   const opId = op => op.t === 'set' ? op.e.id : op.id;
   function coalesce(list) {
     const m = new Map();
@@ -441,6 +449,7 @@ Birthday party compilation</pre>
   }
 
   // Replays pending ops against the cloud and returns the merged item list.
+  // `state.mode` is set to 'degraded' by the caller if ops remain after this.
   async function syncPending(items, hasMeta) {
     let pending = readPending();
     const byId = new Map(items.map(v => [v.id, v]));
@@ -479,8 +488,7 @@ Birthday party compilation</pre>
     }
     writePending(left);
     if (!hasMeta && !left.length) { try { await cs('setItem', META_KEY, '1'); } catch {} }
-    if (left.length) state.mode = 'degraded';
-    return [...byId.values()];
+    return { items: [...byId.values()], pending: left.length };
   }
 
   async function load() {
@@ -492,16 +500,19 @@ Birthday party compilation</pre>
         const allKeys = await cs('getKeys');
         const hasMeta = allKeys.includes(META_KEY);
         const keys = allKeys.filter(k => k.startsWith(CS_PREFIX));
-        items = [];
+        const fetched = [];
         const batches = [];
         for (let i = 0; i < keys.length; i += 50) batches.push(cs('getItems', keys.slice(i, i + 50)));
         for (const vals of await Promise.all(batches)) {
           for (const k of Object.keys(vals)) {
-            try { const e = normalizeEntry(JSON.parse(vals[k])); if (e) items.push(e); } catch {}
+            try { const e = normalizeEntry(JSON.parse(vals[k])); if (e) fetched.push(e); } catch {}
           }
         }
+        items = fetched;
         state.mode = 'cloud';
-        items = await syncPending(items, hasMeta);
+        const res = await syncPending(items, hasMeta);
+        items = res.items;
+        if (res.pending) state.mode = 'degraded';
       } catch (e) {
         console.warn('Cloud storage unavailable', e);
         cloud = null;
@@ -524,29 +535,74 @@ Birthday party compilation</pre>
     return loadPromise;
   }
 
+  // Attempt a cloud write. On failure, fall back to queueing the op and degrade mode.
+  // Returns true if the cloud write succeeded.
+  async function cloudWrite(setItem, key, value) {
+    if (!cloud) return false;
+    try {
+      if (setItem) await cs('setItem', key, value);
+      else await cs('removeItem', key);
+      return true;
+    } catch (e) {
+      console.warn('Cloud write failed, queueing', e);
+      cloud = null;
+      state.mode = 'degraded';
+      return false;
+    }
+  }
+
   async function commitSave(entry) {
     const exists = state.videos.some(v => v.id === entry.id);
     if (!exists && cloud && state.videos.length >= CS_MAX) throw new Error('limit');
     const next = exists ? state.videos.map(v => v.id === entry.id ? entry : v) : [entry, ...state.videos];
-    if (cloud) {
-      await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
+
+    const wrote = await cloudWrite(true, CS_PREFIX + entry.id, JSON.stringify(entry));
+    if (wrote) {
       dropPending(entry.id);
     } else if (cloudApi) {
+      // Cloud exists but the write failed (or we're degraded): queue it so it syncs later.
       if (!queueOp({ t: 'set', e: entry })) throw new Error('local-write-failed');
     }
-    if (!mirror(next) && !cloud) throw new Error('local-write-failed');
+    // Mirror is best-effort when cloud is present; required when local-only.
+    const mirrored = mirror(next);
+    if (!mirrored && !cloud) throw new Error('local-write-failed');
     state.videos = next;
   }
+
   async function commitDelete(id) {
     const next = state.videos.filter(v => v.id !== id);
-    if (cloud) {
-      await cs('removeItem', CS_PREFIX + id);
+
+    const wrote = await cloudWrite(false, CS_PREFIX + id);
+    if (wrote) {
       dropPending(id);
     } else if (cloudApi) {
       if (!queueOp({ t: 'del', id })) throw new Error('local-write-failed');
     }
-    if (!mirror(next) && !cloud) throw new Error('local-write-failed');
+    const mirrored = mirror(next);
+    if (!mirrored && !cloud) throw new Error('local-write-failed');
     state.videos = next;
+  }
+
+  // Wipe every video: cloud keys, pending ops, local mirror. Used by the "Clear" button
+  // so that a subsequent Backup contains only what you re-import.
+  async function clearAllVideos() {
+    // Best-effort cloud key removal in batches; CloudStorage removeItems caps at 100 keys/call.
+    if (cloud) {
+      try {
+        const allKeys = await cs('getKeys');
+        const keys = allKeys.filter(k => k.startsWith(CS_PREFIX));
+        for (let i = 0; i < keys.length; i += 100) {
+          try { await cs('removeItems', keys.slice(i, i + 100)); } catch (e) { console.warn('clear batch failed', e); }
+        }
+      } catch (e) { console.warn('clear getKeys failed', e); }
+    }
+    // Wipe the pending queue so no stale set/del ops resurrect old entries.
+    writePending([]);
+    // Wipe the local mirror.
+    mirror([]);
+    state.videos = [];
+    state.tags = [];
+    savePrefs();
   }
 
   // ---------- Rendering (DOM APIs only, so user text is never parsed as HTML) ----------
@@ -596,13 +652,16 @@ Birthday party compilation</pre>
     const total = state.videos.length;
     const counts = new Map();
     for (const v of state.videos) for (const t of v.tags) counts.set(t, (counts.get(t) || 0) + 1);
-    const allTags = [...counts.keys()];
 
     // Only prune saved filters once the library has actually loaded.
-    if (!state.loading) state.tags = state.tags.filter(t => counts.has(t));
+    let pruned = false;
+    if (!state.loading) {
+      const before = state.tags.length;
+      state.tags = state.tags.filter(t => counts.has(t));
+      pruned = state.tags.length !== before;
+    }
 
     // Keep the chip row usable: top CHIP_MAX tags by frequency, plus anything selected.
-    // (Any tag can still be found through the search box.)
     const chipSet = new Set([...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, CHIP_MAX).map(e => e[0]));
@@ -633,6 +692,8 @@ Birthday party compilation</pre>
     }, [el('span', { text: t }), el('span', { class: 'remove', 'aria-hidden': 'true', text: '×' })])));
     $('filterCount').textContent = state.tags.length ? `${state.tags.length} filter${state.tags.length === 1 ? '' : 's'} selected` : '';
     $('clearFilters').hidden = state.tags.length === 0;
+
+    if (pruned) savePrefs();
 
     const box = $('videoList');
     if (state.loading) { box.replaceChildren(); return; }
@@ -737,6 +798,30 @@ Birthday party compilation</pre>
     backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
   }
 
+  // ----- Clear all data -----
+  async function clearAll() {
+    if (!state.videos.length) { backupMsg('There is nothing to clear.', true); return; }
+    const ok = await confirmMsg(
+      `Delete all ${state.videos.length} saved video${state.videos.length === 1 ? '' : 's'}?\n\n` +
+      `This wipes the catalog on this device AND in Telegram cloud storage so a new Backup will contain only what you import next. ` +
+      `The videos themselves stay in Telegram.`
+    );
+    if (!ok) return;
+    $('clearBtn').disabled = true;
+    try {
+      await clearAllVideos();
+      $('backupText').value = JSON.stringify({ app: 'family-video-vault', version: 1, videos: [] }, null, 2);
+      render();
+      haptic('success');
+      backupMsg('Cleared. The catalog is now empty — import your backup to repopulate.');
+    } catch (e) {
+      console.error(e);
+      backupMsg('Could not clear everything. Some items may remain.', true);
+    } finally {
+      $('clearBtn').disabled = false;
+    }
+  }
+
   // ----- Auto tags -----
   // Tags come from words in titles, but only words that are shared across several titles
   // (or already used in the library) become tags, so a big import doesn't create hundreds
@@ -746,6 +831,7 @@ Birthday party compilation</pre>
   function tokenize(title) {
     const seen = new Set();
     const out = [];
+    // Bare numbers are dropped on purpose (years like 2024 don't make great tags).
     for (const w of String(title || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)) {
       if (w.length < 3 || STOP.has(w) || /^\d+$/.test(w) || seen.has(w)) continue;
       seen.add(w);
@@ -774,6 +860,7 @@ Birthday party compilation</pre>
   function parseBulkText(text) {
     const lines = text.split(/\r?\n/).map(l => l.trim());
     const items = [];
+    let skippedNoTitle = 0;
     let i = 0;
     while (i < lines.length) {
       const url = lines[i] ? normalizeTgUrl(lines[i], true) : null;
@@ -785,10 +872,11 @@ Birthday party compilation</pre>
         items.push({ url, title: lines[j].slice(0, TITLE_MAX) });
         i = j + 1;
       } else {
+        skippedNoTitle++;
         i++; // link without a title: skip just this line
       }
     }
-    return items;
+    return { items, skippedNoTitle };
   }
 
   // Detect and parse a Telegram Desktop HTML export (messages.html)
@@ -827,7 +915,8 @@ Birthday party compilation</pre>
 
     for (const b of blocks) {
       const idm = b.match(/\bid="message(\d+)"/i);
-      if (!idm || !/media_video/i.test(b)) continue;
+      // Match media_video as a class token, not a substring of a caption.
+      if (!idm || !/class="[^"]*\bmedia_video\b[^"]*"/i.test(b)) continue;
       const capm = b.match(/<div class="text">([\s\S]*?)<\/div>/i);
       if (!capm) continue;
       const msgId = idm[1];
@@ -849,6 +938,7 @@ Birthday party compilation</pre>
 
     let list = null;
     let source = '';
+    let skippedNoTitle = 0;
 
     // 1) Try JSON backup
     try {
@@ -870,7 +960,9 @@ Birthday party compilation</pre>
 
     // 3) Fallback to bulk plain-text
     if (!list) {
-      list = parseBulkText(rawText);
+      const parsed = parseBulkText(rawText);
+      list = parsed.items;
+      skippedNoTitle = parsed.skippedNoTitle;
       source = 'bulk-text';
       if (!list.length) {
         return backupMsg('Could not find any videos. Paste a backup JSON, a link+title list, or a Telegram messages.html export.', true);
@@ -897,16 +989,17 @@ Birthday party compilation</pre>
         // Distinct, increasing timestamps keep imported items in file order when sorting.
         created: Number.isFinite(r.created) ? r.created : base + processed
       }, strict);
-      if (!e) { skipped++; processed++; continue; }
-      if (seen.has(urlKey(e.url))) { skipped++; processed++; continue; }
+      processed++;
+      if (!e) { skipped++; continue; }
+      if (seen.has(urlKey(e.url))) { skipped++; continue; }
       if (ids.has(e.id)) e.id = newId();
       try {
         await commitSave(e);
         seen.add(urlKey(e.url));
         ids.add(e.id);
         added++;
-        processed++;
       } catch (err) {
+        skipped++; // count the item that stopped us
         stopped = err && err.message === 'limit'
           ? 'the catalog is full (1000 videos)'
           : 'a save error occurred (check your connection)';
@@ -918,6 +1011,7 @@ Birthday party compilation</pre>
     const total = list.length;
     const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
     let msg = `Added ${added} of ${total}${srcNote}. ${skipped} skipped (duplicates or invalid).`;
+    if (skippedNoTitle) msg += ` ${skippedNoTitle} link${skippedNoTitle === 1 ? '' : 's'} had no title.`;
     if (stopped) msg += ` Stopped early because ${stopped}; ${total - processed} not processed.`;
     backupMsg(msg, !!stopped || (added === 0 && skipped > 0));
     if (added) haptic('success');
@@ -980,6 +1074,7 @@ Birthday party compilation</pre>
   $('saveBtn').addEventListener('click', saveForm);
   $('copyBtn').addEventListener('click', copyBackup);
   $('importBtn').addEventListener('click', importBackup);
+  $('clearBtn').addEventListener('click', clearAll);
   $('backupClose').addEventListener('click', closeModal);
 
   for (const id of ['formModal', 'backupModal']) {
