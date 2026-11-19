@@ -1,1 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Family Video Vault</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #07111f;
+    --card: rgba(255,255,255,.10);
+    --card-strong: rgba(255,255,255,.15);
+    --text: #f8fbff;
+    --muted: #a9b7ca;
+    --accent: #4da3ff;
+    --accent-text: #ffffff;
+    --danger: #ff7d8d;
+    --line: rgba(255,255,255,.16);
+    --chip: rgba(255,255,255,.09);
+    --glass-shadow: 0 18px 50px rgba(0,0,0,.28);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(circle at 15% 10%, rgba(45,125,255,.34), transparent 32rem),
+      radial-gradient(circle at 85% 20%, rgba(119,74,255,.24), transparent 28rem),
+      radial-gradient(circle at 50% 100%, rgba(0,210,255,.13), transparent 30rem),
+      #07111f;
+    color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             calc(max(.65rem, env(safe-area-inset-bottom)) + 5.2rem) env(safe-area-inset-left);
+    overflow-x: hidden;
+  }
+  body::before, body::after {
+    content: ""; position: fixed; border-radius: 50%; pointer-events: none; z-index: -1;
+    filter: blur(8px); opacity: .6;
+  }
+  body::before { width: 180px; height: 180px; background: rgba(45,156,255,.18); top: 12%; left: -70px; }
+  body::after { width: 220px; height: 220px; background: rgba(170,70,255,.13); right: -100px; bottom: 8%; }
+  .app { max-width: 32rem; margin: 0 auto; padding: 1rem .9rem 1.5rem; }
+  .muted { color: var(--muted); }
+  .small { font-size: 11px; }
+  p { margin: 0; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center; gap: .75rem;
+    margin: .25rem 0 1rem; padding: .2rem .1rem;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 .2rem; letter-spacing: -.02em; }
+  #counter { font-size: 12px; }
+  .head-actions { display: flex; gap: .45rem; flex-shrink: 0; }
+
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    border: 1px solid var(--line); border-radius: 14px; padding: .55rem .8rem;
+    font-size: 12px; font-weight: 650; min-height: 38px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 8px 25px rgba(0,0,0,.16);
+  }
+  .btn.primary { background: linear-gradient(135deg, rgba(63,155,255,.95), rgba(91,92,255,.88)); color: var(--accent-text); border-color: rgba(255,255,255,.24); }
+  .btn.ghost { background: rgba(255,255,255,.08); color: var(--text); }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .controls { display: flex; gap: .5rem; margin-bottom: .65rem; }
+  input[type="text"], input[type="search"], select, textarea {
+    background: rgba(255,255,255,.075); border: 1px solid rgba(255,255,255,.14); border-radius: 16px;
+    padding: .72rem .85rem; width: 100%; font-size: 16px;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+  #searchBox { flex: 1; min-width: 0; font-size: 14px; }
+  #sortSel { width: auto; min-width: 104px; font-size: 14px; }
+
+  .filters {
+    display: flex; gap: .45rem; overflow-x: auto; padding: .15rem .05rem .55rem;
+    margin-bottom: .15rem; scrollbar-width: none;
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    white-space: nowrap; border: 1px solid rgba(255,255,255,.13); border-radius: 999px;
+    padding: .42rem .75rem; font-size: 12px; font-weight: 550;
+    background: rgba(255,255,255,.07); color: var(--text);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  .chip.on { background: linear-gradient(135deg, rgba(57,157,255,.95), rgba(102,91,255,.9)); border-color: rgba(255,255,255,.28); box-shadow: 0 7px 22px rgba(57,130,255,.25); }
+  .filter-status {
+    min-height: 28px; display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    margin: .05rem 0 .65rem; font-size: 11px; color: var(--muted);
+  }
+  .selected-tags { display: flex; gap: .35rem; overflow-x: auto; scrollbar-width: none; }
+  .selected-tags::-webkit-scrollbar { display: none; }
+  .selected-tag {
+    display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap;
+    border: 1px solid rgba(92,173,255,.35); background: rgba(65,151,255,.13);
+    border-radius: 999px; padding: .3rem .55rem; color: #dceeff;
+  }
+  .selected-tag:hover { background: rgba(65,151,255,.22); }
+  .selected-tag .remove { font-size: 13px; line-height: 1; opacity: .8; }
+  .clear-filters { border: 0; background: transparent; color: #8fc5ff; font-size: 11px; font-weight: 650; padding: .3rem; }
+
+  .list { display: grid; gap: .8rem; }
+  .card {
+    position: relative; overflow: hidden; background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.055));
+    border: 1px solid rgba(255,255,255,.16); border-radius: 20px; padding: .85rem;
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,.08);
+    backdrop-filter: blur(24px) saturate(125%); -webkit-backdrop-filter: blur(24px) saturate(125%);
+  }
+  .card::before { content: ""; position: absolute; width: 120px; height: 120px; right: -55px; top: -55px; border-radius: 50%; background: rgba(82,165,255,.13); pointer-events: none; }
+  .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; position: relative; z-index: 1; }
+  .date { font: 10px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
+  .card-actions { display: flex; gap: .35rem; }
+  .icon {
+    width: 32px; height: 32px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%;
+    background: rgba(255,255,255,.08); color: var(--muted); font-size: 13px;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .icon:hover { color: var(--text); background: rgba(255,255,255,.14); }
+  .icon.danger:hover { color: var(--danger); }
+  h3 { font-size: 1rem; margin: 0 0 .55rem; overflow-wrap: anywhere; position: relative; z-index: 1; }
+  .tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .75rem; position: relative; z-index: 1; }
+  .tag { border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); color: #a9d4ff; border-radius: 999px; padding: .18rem .52rem; font-size: 11px; font-weight: 550; }
+  .tag.on { background: rgba(65,151,255,.24); border-color: rgba(92,173,255,.5); color: #e9f5ff; box-shadow: 0 0 0 1px rgba(92,173,255,.08) inset; }
+  .play {
+    display: block; text-align: center; text-decoration: none; background: linear-gradient(135deg, rgba(61,156,255,.82), rgba(88,92,255,.78));
+    border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 14px; padding: .72rem;
+    font-size: 13px; font-weight: 650; position: relative; z-index: 1; box-shadow: 0 10px 26px rgba(49,111,255,.18);
+  }
+  .play:hover { filter: brightness(1.08); }
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; backdrop-filter: blur(18px); }
+
+  .bottom-nav {
+    position: fixed; left: 50%; bottom: max(.65rem, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    width: min(calc(100% - 1.2rem), 32rem); display: flex; justify-content: space-around; gap: .4rem;
+    padding: .5rem; border: 1px solid rgba(255,255,255,.15); border-radius: 22px;
+    background: rgba(8,18,34,.68); backdrop-filter: blur(28px) saturate(150%); -webkit-backdrop-filter: blur(28px) saturate(150%);
+    box-shadow: 0 18px 45px rgba(0,0,0,.35); z-index: 20;
+  }
+  .nav-item { flex: 1; border: 0; background: transparent; color: var(--muted); padding: .45rem .25rem; border-radius: 16px; font-size: 10px; font-weight: 600; }
+  .nav-item.active { color: #fff; background: rgba(71,157,255,.14); }
+  .nav-icon { display: block; font-size: 17px; line-height: 1; margin-bottom: .18rem; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(max(.65rem, env(safe-area-inset-bottom)) + 4.9rem);
+    transform: translate(-50%, 10px); opacity: 0; pointer-events: none; z-index: 60;
+    padding: .6rem .85rem; border: 1px solid rgba(255,255,255,.16); border-radius: 999px;
+    background: rgba(8,18,34,.82); color: var(--text); font-size: 12px; font-weight: 600;
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    box-shadow: 0 12px 35px rgba(0,0,0,.3); transition: opacity .18s ease, transform .18s ease;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; padding: .8rem; background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .sheet {
+    width: 100%; max-width: 32rem; max-height: 92%; overflow-y: auto; background: rgba(9,20,37,.82);
+    border: 1px solid rgba(255,255,255,.17); border-radius: 24px; padding: 1.2rem;
+    display: grid; gap: .85rem; box-shadow: 0 24px 70px rgba(0,0,0,.42); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+  }
+  .sheet h2 { margin: 0; font-size: 1.1rem; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: .25rem; }
+  textarea { min-height: 11rem; resize: vertical; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .row { display: flex; gap: .5rem; }
+  .row .btn { flex: 1; min-height: 44px; font-size: 14px; }
+  .msg { font-size: 12px; min-height: 1.2em; }
+  .msg.err { color: var(--danger); }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <div>
+      <h1>🎬 Family Video Vault</h1>
+      <p id="counter" class="muted">Loading catalog...</p>
+      <p id="storageNote" class="muted small"></p>
+    </div>
+    <div class="head-actions">
+      <button id="backupBtn" class="btn ghost" type="button">Backup</button>
+      <button id="addBtn" class="btn primary" type="button">+ Add link</button>
+    </div>
+  </header>
+
+  <div class="controls">
+    <input type="search" id="searchBox" placeholder="Search titles or tags (e.g. #vacation, birthday)" aria-label="Search videos" autocomplete="off">
+    <select id="sortSel" aria-label="Sort videos">
+      <option value="new">Newest</option>
+      <option value="old">Oldest</option>
+      <option value="az">A to Z</option>
+    </select>
+  </div>
+
+  <div id="tagFilters" class="filters" role="group" aria-label="Filter by tag"></div>
+  <div class="filter-status" id="filterStatus" hidden>
+    <div id="selectedTags" class="selected-tags" aria-live="polite"></div>
+    <span id="filterCount" aria-live="polite"></span>
+    <button id="clearFilters" class="clear-filters" type="button" hidden>Clear</button>
+  </div>
+  <section id="videoList" class="list" aria-live="polite"></section>
+
+  <nav class="bottom-nav" aria-label="Primary navigation">
+    <button class="nav-item active" type="button"><span class="nav-icon">⌂</span>Library</button>
+    <button class="nav-item" type="button" data-nav="favorites"><span class="nav-icon">♡</span>Favorites</button>
+    <button class="nav-item" type="button" data-nav="settings"><span class="nav-icon">⚙</span>Settings</button>
+  </nav>
+</main>
+
+<!-- Add / edit -->
+<div id="formModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="formTitle" hidden>
+  <div class="sheet">
+    <h2 id="formTitle">Add video link</h2>
+    <div>
+      <label for="newTitle">Video title</label>
+      <input type="text" id="newTitle" maxlength="120" placeholder="e.g. Summer vacation 2024" autocomplete="off">
+    </div>
+    <div>
+      <label for="newUrl">Telegram message link</label>
+      <input type="text" id="newUrl" maxlength="300" inputmode="url" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="https://t.me/c/...">
+    </div>
+    <div>
+      <label for="newTags">Hashtags</label>
+      <input type="text" id="newTags" maxlength="300" autocapitalize="none" autocomplete="off" placeholder="#vacation #family #2024">
+    </div>
+    <p id="formError" class="msg err" role="alert"></p>
+    <div class="row">
+      <button id="cancelBtn" class="btn ghost" type="button">Cancel</button>
+      <button id="saveBtn" class="btn primary" type="button">Add video</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup / Bulk Import -->
+<div id="backupModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="backupTitle" hidden>
+  <div class="sheet">
+    <h2 id="backupTitle">Backup &amp; Bulk Import</h2>
+    <p class="muted small">
+      <strong>Backup:</strong> Copy the JSON below to save your library.<br>
+      <strong>Import:</strong> Paste a previous backup, a simple link list, <em>or</em> a full Telegram <code>messages.html</code> export.
+    </p>
+    <p class="muted small" style="margin-top:.4rem">
+      Simple list format:
+    </p>
+    <pre class="muted small" style="background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;overflow-x:auto;font-size:11px;line-height:1.35;margin:0 0 .5rem">https://t.me/c/1234567890/42
+Family picnic highlights
+
+https://t.me/c/1234567890/57
+Birthday party compilation</pre>
+    <p class="muted small" style="margin-top:.35rem">
+      Or paste the entire contents of a Telegram Desktop export (<code>messages.html</code>). The app will extract video titles automatically. (You need at least one existing video from that channel so the channel ID is known.)
+    </p>
+    <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Paste backup JSON or bulk video list here..."></textarea>
+    <p id="backupMsg" class="msg" role="status"></p>
+    <div class="row">
+      <button id="copyBtn" class="btn ghost" type="button">Copy</button>
+      <button id="importBtn" class="btn primary" type="button">Import</button>
+    </div>
+    <button id="backupClose" class="btn ghost" type="button">Close</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Telegram helpers ----------
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const has = v => { try { return !!tg && tg.isVersionAtLeast(v); } catch { return false; } };
+  const $ = id => document.getElementById(id);
+
+  const LS_KEY = 'family_videos';   // local mirror + legacy data
+  const LS_PREFS = 'family_videos_prefs'; // filter/sort UI preferences
+  const LS_DIRTY = 'vv_dirty';      // set when changes were saved locally while cloud was unreachable
+  const CS_PREFIX = 'v_';           // one CloudStorage key per video
+  const CS_MAX = 1000;              // CloudStorage allows 1024 keys
+  const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30;
+
+  const cloudApi = has('6.9') && tg.CloudStorage ? tg.CloudStorage : null;
+  let cloud = cloudApi;
+
+  const cs = (method, ...args) => new Promise((resolve, reject) => {
+    cloud[method](...args, (err, result) => err ? reject(new Error(String(err))) : resolve(result));
+  });
+
+  const haptic = type => {
+    try {
+      if (!has('6.1')) return;
+      if (type === 'tap') tg.HapticFeedback.impactOccurred('light');
+      else tg.HapticFeedback.notificationOccurred(type);
+    } catch {}
+  };
+  const alertMsg = msg => new Promise(res => {
+    if (has('6.2')) tg.showAlert(msg, () => res()); else { alert(msg); res(); }
+  });
+  const confirmMsg = msg => new Promise(res => {
+    if (has('6.2')) tg.showConfirm(msg, ok => res(!!ok)); else res(confirm(msg));
+  });
+  function openLink(url) {
+    if (has('6.1') && /^https:\/\/(t\.me|telegram\.(me|dog))\//i.test(url)) tg.openTelegramLink(url);
+    else window.open(url, '_blank', 'noopener');
+  }
+
+  // ---------- Data helpers ----------
+  const pad = n => String(n).padStart(2, '0');
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const urlKey = u => u.toLowerCase().replace(/\/+$/, '');
+
+  function normalizeTgUrl(raw) {
+    let s = String(raw || '').trim();
+    if (/^(t\.me|telegram\.(me|dog))\//i.test(s)) s = 'https://' + s;
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'https:') return null;
+    if (!['t.me', 'telegram.me', 'telegram.dog'].includes(u.hostname.toLowerCase())) return null;
+    if (u.pathname.length < 2) return null;
+    return u.href.length <= 300 ? u.href : null;
+  }
+
+  function parseTags(input) {
+    const out = [];
+    for (const raw of String(input).split(/[\s,]+/)) {
+      const t = raw.replace(/^#+/, '').replace(/[^\p{L}\p{M}\p{N}_]/gu, '').toLowerCase().slice(0, TAG_MAX);
+      if (t && !out.includes('#' + t)) out.push('#' + t);
+      if (out.length >= TAGS_MAX) break;
+    }
+    return out;
+  }
+
+  function normalizeEntry(o) {
+    if (!o || typeof o !== 'object') return null;
+    const url = normalizeTgUrl(o.url);
+    const title = String(o.title || '').trim().slice(0, TITLE_MAX);
+    if (!url || !title) return null;
+    const id = String(o.id == null ? '' : o.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || newId();
+    const tags = parseTags(Array.isArray(o.tags) ? o.tags.join(' ') : '');
+    const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : today();
+    const created = Number.isFinite(o.created) ? o.created : (Date.parse(date) || Date.now());
+    return { id, title, url, tags: tags.length ? tags : ['#family'], date, created };
+  }
+
+  function dedupe(list) {
+    const seen = new Set();
+    return list.filter(v => { const k = urlKey(v.url); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+
+  // ---------- Storage ----------
+  const state = { videos: [], tags: [], query: '', sort: 'new', loading: true, mode: 'local' };
+
+  function readPrefs() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_PREFS));
+      if (!raw || typeof raw !== 'object') return;
+      state.tags = Array.isArray(raw.tags) ? [...new Set(raw.tags.map(String))].slice(0, TAGS_MAX) : [];
+      state.sort = ['new', 'old', 'az'].includes(raw.sort) ? raw.sort : 'new';
+      state.query = typeof raw.query === 'string' ? raw.query : '';
+    } catch {}
+  }
+
+  function savePrefs() {
+    try {
+      localStorage.setItem(LS_PREFS, JSON.stringify({ tags: [...state.tags], sort: state.sort, query: state.query }));
+    } catch {}
+  }
+
+  function readMirror() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_KEY));
+      const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.videos) ? raw.videos : []);
+      return list.map(normalizeEntry).filter(Boolean);
+    } catch { return []; }
+  }
+  function mirror(next) {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+      if (cloudApi && !cloud) localStorage.setItem(LS_DIRTY, '1');
+      return true;
+    } catch { return false; }
+  }
+
+  async function load() {
+    cloud = cloudApi;
+    let items = null;
+    if (cloud) {
+      try {
+        const keys = (await cs('getKeys')).filter(k => k.startsWith(CS_PREFIX));
+        items = [];
+        const batches = [];
+        for (let i = 0; i < keys.length; i += 50) batches.push(cs('getItems', keys.slice(i, i + 50)));
+        for (const vals of await Promise.all(batches)) {
+          for (const k of Object.keys(vals)) {
+            try { const e = normalizeEntry(JSON.parse(vals[k])); if (e) items.push(e); } catch {}
+          }
+        }
+        state.mode = 'cloud';
+      } catch (e) {
+        console.warn('Cloud storage unavailable', e);
+        cloud = null;
+        state.mode = 'degraded';
+        items = null;
+      }
+    } else {
+      state.mode = 'local';
+    }
+
+    if (items === null) {
+      items = readMirror();
+    } else {
+      // Push local-only data to the cloud: first run (migration) or changes made while offline.
+      let dirty = false;
+      try { dirty = localStorage.getItem(LS_DIRTY) === '1'; } catch {}
+      if (items.length === 0 || dirty) {
+        const have = new Set(items.map(v => urlKey(v.url)));
+        const haveIds = new Set(items.map(v => v.id));
+        let failed = false;
+        for (const v of readMirror()) {
+          if (have.has(urlKey(v.url)) || items.length >= CS_MAX) continue;
+          if (haveIds.has(v.id)) v.id = newId();
+          try { await cs('setItem', CS_PREFIX + v.id, JSON.stringify(v)); items.push(v); haveIds.add(v.id); }
+          catch { failed = true; break; }
+        }
+        if (!failed) { try { localStorage.removeItem(LS_DIRTY); } catch {} }
+      }
+    }
+    state.videos = dedupe(items);
+    mirror(state.videos);
+  }
+
+  async function commitSave(entry) {
+    const exists = state.videos.some(v => v.id === entry.id);
+    if (!exists && cloud && state.videos.length >= CS_MAX) throw new Error('limit');
+    const next = exists ? state.videos.map(v => v.id === entry.id ? entry : v) : [entry, ...state.videos];
+    if (cloud) await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
+    if (!mirror(next) && !cloud) throw new Error('local-write-failed');
+    state.videos = next;
+  }
+  async function commitDelete(id) {
+    const next = state.videos.filter(v => v.id !== id);
+    if (cloud) await cs('removeItem', CS_PREFIX + id);
+    if (!mirror(next) && !cloud) throw new Error('local-write-failed');
+    state.videos = next;
+  }
+
+  // ---------- Rendering (DOM APIs only, so user text is never parsed as HTML) ----------
+  function el(tag, attrs = {}, kids = []) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else n.setAttribute(k, v);
+    }
+    for (const c of [].concat(kids)) n.append(c);
+    return n;
+  }
+
+  function visible() {
+    const q = state.query.trim().toLowerCase();
+    const list = state.videos.filter(v =>
+      (state.tags.length === 0 || state.tags.every(tag => v.tags.includes(tag))) &&
+      (!q || v.title.toLowerCase().includes(q) || v.tags.some(t => t.includes(q))));
+    const sorters = {
+      new: (a, b) => b.created - a.created,
+      old: (a, b) => a.created - b.created,
+      az: (a, b) => a.title.localeCompare(b.title)
+    };
+    return list.sort(sorters[state.sort] || sorters.new);
+  }
+
+  function card(v) {
+    return el('article', { class: 'card' }, [
+      el('div', { class: 'card-top' }, [
+        el('span', { class: 'date', text: v.date }),
+        el('div', { class: 'card-actions' }, [
+          el('button', { class: 'icon', type: 'button', 'data-action': 'edit', 'data-id': v.id, 'aria-label': 'Edit ' + v.title, title: 'Edit', text: '✎' }),
+          el('button', { class: 'icon danger', type: 'button', 'data-action': 'delete', 'data-id': v.id, 'aria-label': 'Delete ' + v.title, title: 'Delete', text: '✕' })
+        ])
+      ]),
+      el('h3', { text: v.title }),
+      el('div', { class: 'tags' }, v.tags.map(t => el('button', {
+        class: 'tag' + (state.tags.includes(t) ? ' on' : ''), type: 'button', 'data-tag': t,
+        'aria-pressed': String(state.tags.includes(t)), text: t
+      }))),
+      el('a', { class: 'play', href: v.url, 'data-action': 'open', 'data-id': v.id, text: 'Play in Telegram' })
+    ]);
+  }
+
+  function render() {
+    const total = state.videos.length;
+    const allTags = [...new Set(state.videos.flatMap(v => v.tags))].sort((a, b) => a.localeCompare(b));
+    state.tags = state.tags.filter(t => allTags.includes(t));
+    const list = state.loading ? [] : visible();
+
+    $('counter').textContent = state.loading ? 'Loading catalog...'
+      : list.length === total ? `${total} ${total === 1 ? 'video' : 'videos'}`
+      : `${list.length} of ${total} videos`;
+    $('storageNote').textContent = state.loading ? ''
+      : state.mode === 'cloud' ? 'Synced across your Telegram devices.'
+      : state.mode === 'degraded' ? 'Cloud sync unavailable. Changes are saved on this device and will sync later.'
+      : 'Saved on this device only.';
+
+    $('tagFilters').replaceChildren(...['All', ...allTags].map(t => {
+      const active = t === 'All' ? state.tags.length === 0 : state.tags.includes(t);
+      return el('button', { class: 'chip' + (active ? ' on' : ''), type: 'button', 'data-tag': t, 'aria-pressed': String(active), text: t });
+    }));
+
+    const status = $('filterStatus');
+    const selected = $('selectedTags');
+    status.hidden = state.tags.length === 0;
+    selected.replaceChildren(...state.tags.map(t => el('button', {
+      class: 'selected-tag', type: 'button', 'data-tag': t, 'aria-label': 'Remove filter ' + t,
+      title: 'Remove ' + t
+    }, [el('span', { text: t }), el('span', { class: 'remove', 'aria-hidden': 'true', text: '×' })])));
+    $('filterCount').textContent = state.tags.length ? `${state.tags.length} filter${state.tags.length === 1 ? '' : 's'} selected` : '';
+    $('clearFilters').hidden = state.tags.length === 0;
+
+    const box = $('videoList');
+    if (state.loading) { box.replaceChildren(); return; }
+    if (total === 0) {
+      box.replaceChildren(el('div', { class: 'empty', text: 'No videos yet. Tap "+ Add link" to save your first Telegram video.' }));
+    } else if (list.length === 0) {
+      box.replaceChildren(el('div', { class: 'empty', text: 'No videos match. Clear the search or choose All.' }));
+    } else {
+      box.replaceChildren(...list.map(card));
+    }
+  }
+
+  // ---------- Modals ----------
+  let activeModal = null, editingId = null, saving = false;
+
+  function showModal(id) {
+    if (activeModal) $(activeModal).hidden = true;
+    activeModal = id;
+    $(id).hidden = false;
+    try { if (has('6.1')) tg.BackButton.show(); } catch {}
+  }
+  function closeModal() {
+    if (!activeModal) return;
+    $(activeModal).hidden = true;
+    activeModal = null;
+    editingId = null;
+    try { if (has('6.1')) tg.BackButton.hide(); } catch {}
+  }
+
+  function openForm(v) {
+    editingId = v ? v.id : null;
+    $('formTitle').textContent = v ? 'Edit video' : 'Add video link';
+    $('saveBtn').textContent = v ? 'Save changes' : 'Add video';
+    $('newTitle').value = v ? v.title : '';
+    $('newUrl').value = v ? v.url : '';
+    $('newTags').value = v ? v.tags.join(' ') : '';
+    $('formError').textContent = '';
+    showModal('formModal');
+    $('newTitle').focus();
+  }
+
+  async function saveForm() {
+    if (saving) return;
+    const fail = msg => { $('formError').textContent = msg; haptic('error'); };
+    const title = $('newTitle').value.trim();
+    if (!title) return fail('Enter a title.');
+    const url = normalizeTgUrl($('newUrl').value);
+    if (!url) return fail('Enter a Telegram message link that starts with https://t.me/.');
+    const dup = state.videos.find(v => urlKey(v.url) === urlKey(url) && v.id !== editingId);
+    if (dup) return fail(`This link is already saved as "${dup.title}".`);
+
+    const old = editingId ? state.videos.find(v => v.id === editingId) : null;
+    const tags = parseTags($('newTags').value);
+    const entry = {
+      id: old ? old.id : newId(),
+      title: title.slice(0, TITLE_MAX),
+      url,
+      tags: tags.length ? tags : ['#family'],
+      date: old ? old.date : today(),
+      created: old ? old.created : Date.now()
+    };
+
+    saving = true;
+    $('saveBtn').disabled = true;
+    try {
+      await commitSave(entry);
+      closeModal();
+      render();
+      haptic('success');
+    } catch (e) {
+      fail(e.message === 'limit'
+        ? 'The catalog is full (1000 videos). Remove some to add more.'
+        : 'Could not save. Check your connection and try again.');
+    } finally {
+      saving = false;
+      $('saveBtn').disabled = false;
+    }
+  }
+
+  async function deleteVideo(id) {
+    const v = state.videos.find(x => x.id === id);
+    if (!v) return;
+    if (!await confirmMsg(`Remove "${v.title}" from your catalog? The video stays in Telegram.`)) return;
+    try { await commitDelete(id); haptic('success'); render(); }
+    catch { await alertMsg('Could not remove the video. Try again.'); }
+  }
+
+  // ---------- Backup ----------
+  const backupMsg = (text, isErr) => { const m = $('backupMsg'); m.textContent = text; m.className = 'msg' + (isErr ? ' err' : ''); };
+
+  function openBackup() {
+    $('backupText').value = JSON.stringify({ app: 'family-video-vault', version: 1, videos: state.videos }, null, 2);
+    backupMsg('');
+    showModal('backupModal');
+  }
+  async function copyBackup() {
+    const ta = $('backupText');
+    try { await navigator.clipboard.writeText(ta.value); backupMsg('Copied to clipboard.'); return; } catch {}
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
+  }
+  // Generate tags from significant words in the title (fully generic)
+  function autoTags(title) {
+    const stop = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
+    const words = String(title || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w));
+    const seen = new Set();
+    const tags = [];
+    for (const w of words) {
+      if (seen.has(w)) continue;
+      seen.add(w);
+      tags.push('#' + w);
+      if (tags.length >= 6) break;
+    }
+    if (!tags.length) tags.push('#video');
+    return tags;
+  }
+
+  // Parse bulk plain-text format:
+  // https://t.me/c/.../123
+  // Video Title Here
+  function parseBulkText(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim());
+    const items = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line) { i++; continue; }
+      const url = normalizeTgUrl(line);
+      if (url) {
+        let title = '';
+        let j = i + 1;
+        while (j < lines.length && !lines[j]) j++;
+        if (j < lines.length && !normalizeTgUrl(lines[j])) {
+          title = lines[j].slice(0, TITLE_MAX);
+          i = j + 1;
+        } else {
+          i++;
+        }
+        if (title) items.push({ url, title, tags: autoTags(title) });
+        else i++;
+      } else {
+        i++;
+      }
+    }
+    return items;
+  }
+
+  // Detect and parse a Telegram Desktop HTML export (messages.html)
+  function isTelegramExport(text) {
+    return /class="message[^"]*"/i.test(text) && /id="message\d+"/i.test(text) && /Exported Data|page_wrap|chat_page/i.test(text);
+  }
+
+  function getChannelIdFromLibrary() {
+    for (const v of state.videos) {
+      const m = String(v.url || '').match(/t\.me\/c\/(\d+)\//i);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  function parseTelegramHtml(text) {
+    const channelId = getChannelIdFromLibrary();
+    if (!channelId) {
+      return { error: 'Add at least one video from this channel first (so the app knows the channel ID), then try importing the HTML again.' };
+    }
+
+    // Extract message blocks that contain a video and a text caption
+    // Pattern: id="message123" ... media_video ... <div class="text">Caption</div>
+    const items = [];
+    const msgRe = /id="message(\d+)"[\s\S]*?(?=id="message\d+"|<\/div>\s*<\/div>\s*<\/div>\s*<\/body>|$)/gi;
+    let match;
+    const seenTitles = new Set();
+
+    // Simpler approach: find all message IDs that have both media_video and a nearby text div
+    const videoMsgRe = /id="message(\d+)"[\s\S]{0,2500}?media_video[\s\S]{0,1500}?<div class="text">\s*([^<]+?)\s*<\/div>/gi;
+
+    while ((match = videoMsgRe.exec(text)) !== null) {
+      const msgId = match[1];
+      let title = match[2].replace(/\s+/g, ' ').trim();
+      // Decode common HTML entities
+      title = title
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .trim()
+        .slice(0, TITLE_MAX);
+
+      if (!title || title.length < 2) continue;
+      // Skip pure service-looking short texts
+      if (/^channel\b/i.test(title)) continue;
+
+      const key = title.toLowerCase();
+      if (seenTitles.has(key)) continue;
+      seenTitles.add(key);
+
+      const url = `https://t.me/c/${channelId}/${msgId}`;
+      items.push({ url, title, tags: autoTags(title) });
+    }
+
+    return { items };
+  }
+
+  async function importBackup() {
+    const rawText = $('backupText').value.trim();
+    if (!rawText) return backupMsg('Paste a backup JSON, bulk list, or Telegram HTML export first.', true);
+
+    let list = null;
+    let source = '';
+
+    // 1) Try JSON backup
+    try {
+      const data = JSON.parse(rawText);
+      list = Array.isArray(data) ? data : (data && Array.isArray(data.videos) ? data.videos : null);
+      if (list) source = 'json';
+    } catch {}
+
+    // 2) Try Telegram HTML export
+    if (!list && isTelegramExport(rawText)) {
+      const result = parseTelegramHtml(rawText);
+      if (result.error) return backupMsg(result.error, true);
+      list = result.items;
+      source = 'telegram-html';
+      if (!list.length) {
+        return backupMsg('No video captions found in this Telegram export.', true);
+      }
+    }
+
+    // 3) Fallback to bulk plain-text
+    if (!list) {
+      list = parseBulkText(rawText);
+      source = 'bulk-text';
+      if (!list.length) {
+        return backupMsg('Could not find any videos. Paste a backup JSON, a link+title list, or a Telegram messages.html export.', true);
+      }
+    }
+
+    const seen = new Set(state.videos.map(v => urlKey(v.url)));
+    const ids = new Set(state.videos.map(v => v.id));
+    let added = 0;
+    let skipped = 0;
+
+    for (const raw of list) {
+      let e;
+      if (raw && raw.url && raw.title) {
+        e = normalizeEntry({
+          id: raw.id,
+          title: raw.title,
+          url: raw.url,
+          tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : autoTags(raw.title),
+          date: raw.date,
+          created: raw.created
+        });
+      } else {
+        e = normalizeEntry(raw);
+      }
+      if (!e) { skipped++; continue; }
+      if (seen.has(urlKey(e.url))) { skipped++; continue; }
+      if (ids.has(e.id)) e.id = newId();
+      try {
+        await commitSave(e);
+        seen.add(urlKey(e.url));
+        ids.add(e.id);
+        added++;
+      } catch {
+        break;
+      }
+    }
+
+    render();
+    const total = list.length;
+    const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+    backupMsg(
+      `Added ${added} of ${total}${srcNote}. ${skipped} skipped (duplicates or invalid).`,
+      added === 0 && skipped > 0
+    );
+    if (added) haptic('success');
+  }
+
+
+  // ---------- Events ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-action],[data-tag]');
+    if (!t || !t.closest('.app')) return;
+    if (t.dataset.tag) {
+      const tag = t.dataset.tag;
+      if (tag === 'All') {
+        state.tags = [];
+      } else if (state.tags.includes(tag)) {
+        state.tags = state.tags.filter(x => x !== tag);
+      } else {
+        state.tags = [...state.tags, tag];
+      }
+      savePrefs();
+      haptic('tap');
+      render();
+      return;
+    }
+    const v = state.videos.find(x => x.id === t.dataset.id);
+    if (!v) return;
+    if (t.dataset.action === 'open') { e.preventDefault(); openLink(v.url); }
+    else if (t.dataset.action === 'edit') openForm(v);
+    else if (t.dataset.action === 'delete') deleteVideo(v.id);
+  });
+
+  let toastTimer;
+  function showToast(message) {
+    const toast = $('toast');
+    clearTimeout(toastTimer);
+    toast.textContent = message;
+    toast.hidden = false;
+    requestAnimationFrame(() => toast.classList.add('show'));
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => { toast.hidden = true; }, 180);
+    }, 1800);
+  }
+
+  document.querySelectorAll('[data-nav]').forEach(btn => {
+    btn.addEventListener('click', () => showToast(btn.dataset.nav === 'favorites' ? 'Favorites coming soon.' : 'Settings coming soon.'));
+  });
+
+  $('addBtn').addEventListener('click', () => openForm(null));
+  $('backupBtn').addEventListener('click', openBackup);
+  $('clearFilters').addEventListener('click', () => {
+    state.tags = [];
+    state.query = '';
+    $('searchBox').value = '';
+    savePrefs();
+    haptic('tap');
+    render();
+  });
+  $('cancelBtn').addEventListener('click', closeModal);
+  $('saveBtn').addEventListener('click', saveForm);
+  $('copyBtn').addEventListener('click', copyBackup);
+  $('importBtn').addEventListener('click', importBackup);
+  $('backupClose').addEventListener('click', closeModal);
+
+  for (const id of ['formModal', 'backupModal']) {
+    $(id).addEventListener('click', e => { if (e.target === $(id)) closeModal(); });
+  }
+  for (const id of ['newTitle', 'newUrl', 'newTags']) {
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveForm(); } });
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  let searchTimer;
+  $('searchBox').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.query = e.target.value; savePrefs(); render(); }, 150);
+  });
+  $('sortSel').addEventListener('change', e => { state.sort = e.target.value; savePrefs(); render(); });
+
+  // Pick up changes made on another device when the app comes back to the foreground.
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !state.loading && !activeModal && !saving) {
+      const y = window.scrollY;
+      await load();
+      render();
+      window.scrollTo(0, y);
+    }
+  });
+
+  // ---------- Start ----------
+  async function init() {
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+        if (has('7.7')) tg.disableVerticalSwipes();
+        if (has('6.1')) { tg.setHeaderColor('bg_color'); tg.BackButton.onClick(closeModal); }
+      } catch (e) { console.warn(e); }
+    }
+    readPrefs();
+    $('searchBox').value = state.query;
+    $('sortSel').value = state.sort;
+    render();
+    try { await load(); } catch (e) { console.error(e); state.videos = readMirror(); state.mode = 'local'; }
+    state.loading = false;
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
 
