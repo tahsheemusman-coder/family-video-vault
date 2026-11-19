@@ -141,6 +141,15 @@
   .play:hover { filter: brightness(1.08); }
   .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; backdrop-filter: blur(18px); }
 
+  .pager {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    margin-top: .9rem; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 16px;
+    background: rgba(255,255,255,.05); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    font-size: 12px; color: var(--muted);
+  }
+  .pager .btn { min-height: 36px; padding: .4rem .7rem; }
+  .pager-info { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+
   .bottom-nav {
     position: fixed; left: 50%; bottom: max(.65rem, env(safe-area-inset-bottom)); transform: translateX(-50%);
     width: min(calc(100% - 1.2rem), 32rem); display: flex; justify-content: space-around; gap: .4rem;
@@ -160,9 +169,7 @@
     box-shadow: 0 12px 35px rgba(0,0,0,.3); transition: opacity .18s ease, transform .18s ease;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
-  @media (prefers-reduced-motion: reduce) {
-    .toast { transition: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 
   .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; padding: .8rem; background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .sheet {
@@ -209,6 +216,11 @@
     <button id="clearFilters" class="clear-filters" type="button" hidden>Clear</button>
   </div>
   <section id="videoList" class="list" aria-live="polite"></section>
+  <div id="pager" class="pager" hidden>
+    <button id="prevPage" class="btn ghost" type="button">← Prev</button>
+    <span id="pagerInfo" class="pager-info">Page 1 of 1</span>
+    <button id="nextPage" class="btn ghost" type="button">Next →</button>
+  </div>
 
   <nav class="bottom-nav" aria-label="Primary navigation">
     <button class="nav-item active" type="button"><span class="nav-icon">⌂</span>Library</button>
@@ -292,8 +304,8 @@ Birthday party compilation</pre>
   const CS_MAX = 1000 - CS_RESERVED;       // max number of video entries we'll store
   const CS_TIMEOUT = 8000;                 // ms before a CloudStorage call is treated as failed
   const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30, CHIP_MAX = 40;
+  const PAGE_SIZE = 10;                    // videos rendered per page
   // https://t.me/c/<id>/<msg>, https://t.me/<user>/<msg>, optionally with a topic segment.
-  // Usernames are 5-32 chars, start with a letter, letters/digits/underscore only.
   const MSG_PATH = /^\/(?:c\/\d+|[A-Za-z][A-Za-z0-9_]{4,31})(?:\/\d+){1,2}\/?$/;
 
   const cloudApi = has('6.9') && tg.CloudStorage ? tg.CloudStorage : null;
@@ -384,7 +396,7 @@ Birthday party compilation</pre>
   }
 
   // ---------- Storage ----------
-  const state = { videos: [], tags: [], query: '', sort: 'new', loading: true, mode: 'local' };
+  const state = { videos: [], tags: [], query: '', sort: 'new', page: 1, loading: true, mode: 'local' };
 
   function readPrefs() {
     try {
@@ -393,6 +405,7 @@ Birthday party compilation</pre>
       state.tags = Array.isArray(raw.tags) ? [...new Set(raw.tags.map(String))].slice(0, TAGS_MAX) : [];
       state.sort = ['new', 'old', 'az'].includes(raw.sort) ? raw.sort : 'new';
       state.query = typeof raw.query === 'string' ? raw.query : '';
+      // page is intentionally not persisted
     } catch {}
   }
 
@@ -449,7 +462,6 @@ Birthday party compilation</pre>
   }
 
   // Replays pending ops against the cloud and returns the merged item list.
-  // `state.mode` is set to 'degraded' by the caller if ops remain after this.
   async function syncPending(items, hasMeta) {
     let pending = readPending();
     const byId = new Map(items.map(v => [v.id, v]));
@@ -536,7 +548,6 @@ Birthday party compilation</pre>
   }
 
   // Attempt a cloud write. On failure, fall back to queueing the op and degrade mode.
-  // Returns true if the cloud write succeeded.
   async function cloudWrite(setItem, key, value) {
     if (!cloud) return false;
     try {
@@ -560,10 +571,8 @@ Birthday party compilation</pre>
     if (wrote) {
       dropPending(entry.id);
     } else if (cloudApi) {
-      // Cloud exists but the write failed (or we're degraded): queue it so it syncs later.
       if (!queueOp({ t: 'set', e: entry })) throw new Error('local-write-failed');
     }
-    // Mirror is best-effort when cloud is present; required when local-only.
     const mirrored = mirror(next);
     if (!mirrored && !cloud) throw new Error('local-write-failed');
     state.videos = next;
@@ -583,10 +592,8 @@ Birthday party compilation</pre>
     state.videos = next;
   }
 
-  // Wipe every video: cloud keys, pending ops, local mirror. Used by the "Clear" button
-  // so that a subsequent Backup contains only what you re-import.
+  // Wipe every video: cloud keys, pending ops, local mirror.
   async function clearAllVideos() {
-    // Best-effort cloud key removal in batches; CloudStorage removeItems caps at 100 keys/call.
     if (cloud) {
       try {
         const allKeys = await cs('getKeys');
@@ -596,16 +603,15 @@ Birthday party compilation</pre>
         }
       } catch (e) { console.warn('clear getKeys failed', e); }
     }
-    // Wipe the pending queue so no stale set/del ops resurrect old entries.
     writePending([]);
-    // Wipe the local mirror.
     mirror([]);
     state.videos = [];
     state.tags = [];
+    state.page = 1;
     savePrefs();
   }
 
-  // ---------- Rendering (DOM APIs only, so user text is never parsed as HTML) ----------
+  // ---------- Rendering ----------
   function el(tag, attrs = {}, kids = []) {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -661,18 +667,22 @@ Birthday party compilation</pre>
       pruned = state.tags.length !== before;
     }
 
-    // Keep the chip row usable: top CHIP_MAX tags by frequency, plus anything selected.
     const chipSet = new Set([...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, CHIP_MAX).map(e => e[0]));
     for (const t of state.tags) chipSet.add(t);
     const chipTags = [...chipSet].sort((a, b) => a.localeCompare(b));
 
-    const list = state.loading ? [] : visible();
+    const filtered = state.loading ? [] : visible();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const start = (state.page - 1) * PAGE_SIZE;
+    const slice = filtered.slice(start, start + PAGE_SIZE);
 
     $('counter').textContent = state.loading ? 'Loading catalog...'
-      : list.length === total ? `${total} ${total === 1 ? 'video' : 'videos'}`
-      : `${list.length} of ${total} videos`;
+      : filtered.length === total ? `${total} ${total === 1 ? 'video' : 'videos'}`
+      : `${filtered.length} of ${total} videos`;
     $('storageNote').textContent = state.loading ? ''
       : state.mode === 'cloud' ? 'Synced across your Telegram devices.'
       : state.mode === 'degraded' ? 'Cloud sync unavailable. Changes are saved on this device and will sync later.'
@@ -696,14 +706,25 @@ Birthday party compilation</pre>
     if (pruned) savePrefs();
 
     const box = $('videoList');
-    if (state.loading) { box.replaceChildren(); return; }
+    if (state.loading) { box.replaceChildren(); $('pager').hidden = true; return; }
     if (total === 0) {
       box.replaceChildren(el('div', { class: 'empty', text: 'No videos yet. Tap "+ Add link" to save your first Telegram video.' }));
-    } else if (list.length === 0) {
-      box.replaceChildren(el('div', { class: 'empty', text: 'No videos match. Clear the search or choose All.' }));
-    } else {
-      box.replaceChildren(...list.map(card));
+      $('pager').hidden = true;
+      return;
     }
+    if (filtered.length === 0) {
+      box.replaceChildren(el('div', { class: 'empty', text: 'No videos match. Clear the search or choose All.' }));
+      $('pager').hidden = true;
+      return;
+    }
+    box.replaceChildren(...slice.map(card));
+
+    // Pager
+    const pager = $('pager');
+    pager.hidden = filtered.length <= PAGE_SIZE;
+    $('pagerInfo').textContent = `Page ${state.page} of ${totalPages} · ${start + 1}–${start + slice.length}`;
+    $('prevPage').disabled = state.page <= 1;
+    $('nextPage').disabled = state.page >= totalPages;
   }
 
   // ---------- Modals ----------
@@ -823,15 +844,11 @@ Birthday party compilation</pre>
   }
 
   // ----- Auto tags -----
-  // Tags come from words in titles, but only words that are shared across several titles
-  // (or already used in the library) become tags, so a big import doesn't create hundreds
-  // of one-off tags. Small batches (<= 10 titles) just use their own words.
   const STOP = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
 
   function tokenize(title) {
     const seen = new Set();
     const out = [];
-    // Bare numbers are dropped on purpose (years like 2024 don't make great tags).
     for (const w of String(title || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)) {
       if (w.length < 3 || STOP.has(w) || /^\d+$/.test(w) || seen.has(w)) continue;
       seen.add(w);
@@ -854,9 +871,6 @@ Birthday party compilation</pre>
       .map(w => '#' + w);
   }
 
-  // Parse bulk plain-text format:
-  // https://t.me/c/.../123
-  // Video Title Here
   function parseBulkText(text) {
     const lines = text.split(/\r?\n/).map(l => l.trim());
     const items = [];
@@ -867,19 +881,17 @@ Birthday party compilation</pre>
       if (!url) { i++; continue; }
       let j = i + 1;
       while (j < lines.length && !lines[j]) j++;
-      // The next non-empty line is the title unless it is itself a Telegram link.
       if (j < lines.length && !normalizeTgUrl(lines[j])) {
         items.push({ url, title: lines[j].slice(0, TITLE_MAX) });
         i = j + 1;
       } else {
         skippedNoTitle++;
-        i++; // link without a title: skip just this line
+        i++;
       }
     }
     return { items, skippedNoTitle };
   }
 
-  // Detect and parse a Telegram Desktop HTML export (messages.html)
   function isTelegramExport(text) {
     return /class="message[^"]*"/i.test(text) && /id="message\d+"/i.test(text) && /Exported Data|page_wrap|chat_page/i.test(text);
   }
@@ -892,7 +904,6 @@ Birthday party compilation</pre>
     return null;
   }
 
-  // &amp; is decoded last so "&amp;lt;" becomes "&lt;" and not "<".
   function decodeEntities(s) {
     return s
       .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -907,25 +918,19 @@ Birthday party compilation</pre>
     if (!channelId) {
       return { error: 'Add at least one video from this channel first (so the app knows the channel ID), then try importing the HTML again.' };
     }
-
-    // Split into one block per message first, so an id can never be paired with another message's caption.
     const blocks = text.split(/(?=<div class="message )/i);
     const items = [];
     const seenIds = new Set();
-
     for (const b of blocks) {
       const idm = b.match(/\bid="message(\d+)"/i);
-      // Match media_video as a class token, not a substring of a caption.
       if (!idm || !/class="[^"]*\bmedia_video\b[^"]*"/i.test(b)) continue;
       const capm = b.match(/<div class="text">([\s\S]*?)<\/div>/i);
       if (!capm) continue;
       const msgId = idm[1];
       if (seenIds.has(msgId)) continue;
-
       const title = decodeEntities(capm[1].replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ''))
         .replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX);
       if (title.length < 2 || /^channel\b/i.test(title)) continue;
-
       seenIds.add(msgId);
       items.push({ url: `https://t.me/c/${channelId}/${msgId}`, title });
     }
@@ -940,36 +945,29 @@ Birthday party compilation</pre>
     let source = '';
     let skippedNoTitle = 0;
 
-    // 1) Try JSON backup
     try {
       const data = JSON.parse(rawText);
       list = Array.isArray(data) ? data : (data && Array.isArray(data.videos) ? data.videos : null);
       if (list) source = 'json';
     } catch {}
 
-    // 2) Try Telegram HTML export
     if (!list && isTelegramExport(rawText)) {
       const result = parseTelegramHtml(rawText);
       if (result.error) return backupMsg(result.error, true);
       list = result.items;
       source = 'telegram-html';
-      if (!list.length) {
-        return backupMsg('No video captions found in this Telegram export.', true);
-      }
+      if (!list.length) return backupMsg('No video captions found in this Telegram export.', true);
     }
 
-    // 3) Fallback to bulk plain-text
     if (!list) {
       const parsed = parseBulkText(rawText);
       list = parsed.items;
       skippedNoTitle = parsed.skippedNoTitle;
       source = 'bulk-text';
-      if (!list.length) {
-        return backupMsg('Could not find any videos. Paste a backup JSON, a link+title list, or a Telegram messages.html export.', true);
-      }
+      if (!list.length) return backupMsg('Could not find any videos. Paste a backup JSON, a link+title list, or a Telegram messages.html export.', true);
     }
 
-    const strict = source !== 'json'; // backups may contain older links; keep those importable
+    const strict = source !== 'json';
     const needTags = r => !(r && Array.isArray(r.tags) && r.tags.length);
     const tagger = makeAutoTagger(list.filter(r => r && needTags(r)).map(r => r.title));
 
@@ -986,7 +984,6 @@ Birthday party compilation</pre>
         url: r.url,
         tags: needTags(r) ? tagger(r.title) : r.tags,
         date: r.date,
-        // Distinct, increasing timestamps keep imported items in file order when sorting.
         created: Number.isFinite(r.created) ? r.created : base + processed
       }, strict);
       processed++;
@@ -999,7 +996,7 @@ Birthday party compilation</pre>
         ids.add(e.id);
         added++;
       } catch (err) {
-        skipped++; // count the item that stopped us
+        skipped++;
         stopped = err && err.message === 'limit'
           ? 'the catalog is full (1000 videos)'
           : 'a save error occurred (check your connection)';
@@ -1030,6 +1027,7 @@ Birthday party compilation</pre>
       } else {
         state.tags = [...state.tags, tag];
       }
+      state.page = 1;
       savePrefs();
       haptic('tap');
       render();
@@ -1065,6 +1063,7 @@ Birthday party compilation</pre>
   $('clearFilters').addEventListener('click', () => {
     state.tags = [];
     state.query = '';
+    state.page = 1;
     $('searchBox').value = '';
     savePrefs();
     haptic('tap');
@@ -1077,6 +1076,15 @@ Birthday party compilation</pre>
   $('clearBtn').addEventListener('click', clearAll);
   $('backupClose').addEventListener('click', closeModal);
 
+  $('prevPage').addEventListener('click', () => {
+    if (state.page > 1) { state.page--; haptic('tap'); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  });
+  $('nextPage').addEventListener('click', () => {
+    const filtered = visible();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (state.page < totalPages) { state.page++; haptic('tap'); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  });
+
   for (const id of ['formModal', 'backupModal']) {
     $(id).addEventListener('click', e => { if (e.target === $(id)) closeModal(); });
   }
@@ -1088,11 +1096,20 @@ Birthday party compilation</pre>
   let searchTimer;
   $('searchBox').addEventListener('input', e => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { state.query = e.target.value; savePrefs(); render(); }, 150);
+    searchTimer = setTimeout(() => {
+      state.query = e.target.value;
+      state.page = 1;
+      savePrefs();
+      render();
+    }, 150);
   });
-  $('sortSel').addEventListener('change', e => { state.sort = e.target.value; savePrefs(); render(); });
+  $('sortSel').addEventListener('change', e => {
+    state.sort = e.target.value;
+    state.page = 1;
+    savePrefs();
+    render();
+  });
 
-  // Pick up changes made on another device when the app comes back to the foreground.
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && !state.loading && !activeModal && !saving) {
       const y = window.scrollY;
@@ -1110,7 +1127,6 @@ Birthday party compilation</pre>
         tg.expand();
         if (has('7.7')) tg.disableVerticalSwipes();
         if (has('6.1')) tg.BackButton.onClick(closeModal);
-        // The app is hard-coded dark, so keep Telegram's chrome dark too (custom colors need 6.9).
         if (has('6.9')) { tg.setHeaderColor('#07111f'); tg.setBackgroundColor('#07111f'); }
       } catch (e) { console.warn(e); }
     }
