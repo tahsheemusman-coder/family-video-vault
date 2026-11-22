@@ -78,9 +78,8 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
   }
   input::placeholder, textarea::placeholder { color: var(--muted); }
-  /* 16px so iOS doesn't zoom the page on focus */
-  #searchBox { flex: 1; min-width: 0; font-size: 16px; }
-  #sortSel { width: auto; min-width: 104px; font-size: 16px; }
+  #searchBox { flex: 1; min-width: 0; font-size: 14px; }
+  #sortSel { width: auto; min-width: 104px; font-size: 14px; }
 
   .filters {
     display: flex; gap: .45rem; overflow-x: auto; padding: .15rem .05rem .55rem;
@@ -242,7 +241,7 @@
     <h2 id="backupTitle">Backup &amp; Bulk Import</h2>
     <p class="muted small">
       <strong>Backup:</strong> Copy the JSON below to save your library.<br>
-      <strong>Import:</strong> Tap <em>Import file</em> and choose a saved backup (<code>.txt</code> or <code>.json</code>), a simple link list, <em>or</em> a Telegram <code>messages.html</code> export.
+      <strong>Import:</strong> Paste a previous backup, a simple link list, <em>or</em> a full Telegram <code>messages.html</code> export.
     </p>
     <p class="muted small" style="margin-top:.4rem">
       Simple list format:
@@ -255,14 +254,12 @@ Birthday party compilation</pre>
     <p class="muted small" style="margin-top:.35rem">
       Or paste the entire contents of a Telegram Desktop export (<code>messages.html</code>). The app will extract video titles automatically. (You need at least one existing video from that channel so the channel ID is known.)
     </p>
-    <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Your backup JSON appears here. You can also paste text and use &quot;Import pasted text&quot;."></textarea>
+    <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Paste backup JSON or bulk video list here..."></textarea>
     <p id="backupMsg" class="msg" role="status"></p>
     <div class="row">
       <button id="copyBtn" class="btn ghost" type="button">Copy</button>
-      <button id="importBtn" class="btn primary" type="button">Import file</button>
+      <button id="importBtn" class="btn primary" type="button">Import</button>
     </div>
-    <button id="importPasteBtn" class="btn ghost" type="button">Import pasted text</button>
-    <input type="file" id="importFile" accept=".txt,.json,.html,.htm,text/plain,application/json,text/html" hidden>
     <button id="backupClose" class="btn ghost" type="button">Close</button>
   </div>
 </div>
@@ -278,29 +275,18 @@ Birthday party compilation</pre>
   const has = v => { try { return !!tg && tg.isVersionAtLeast(v); } catch { return false; } };
   const $ = id => document.getElementById(id);
 
-  const LS_KEY = 'family_videos';          // local mirror + legacy data
-  const LS_PREFS = 'family_videos_prefs';  // filter/sort UI preferences
-  const LS_DIRTY = 'vv_dirty';             // legacy flag, removed on load
-  const LS_PENDING = 'vv_pending';         // queue of edits/deletes made while cloud was unreachable
-  const CS_PREFIX = 'v_';                  // one CloudStorage key per video
-  const META_KEY = 'meta_init';            // marks that the one-time local -> cloud migration happened
-  const CS_MAX = 1000;                     // CloudStorage allows 1024 keys
-  const CS_TIMEOUT = 8000;                 // ms before a CloudStorage call is treated as failed
-  const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30, CHIP_MAX = 40;
-  // https://t.me/c/<id>/<msg>, https://t.me/<user>/<msg>, optionally with a topic segment
-  const MSG_PATH = /^\/(?:c\/\d+|[A-Za-z][A-Za-z0-9_]{3,})(?:\/\d+){1,2}\/?$/;
+  const LS_KEY = 'family_videos';   // local mirror + legacy data
+  const LS_PREFS = 'family_videos_prefs'; // filter/sort UI preferences
+  const LS_DIRTY = 'vv_dirty';      // set when changes were saved locally while cloud was unreachable
+  const CS_PREFIX = 'v_';           // one CloudStorage key per video
+  const CS_MAX = 1000;              // CloudStorage allows 1024 keys
+  const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30;
 
   const cloudApi = has('6.9') && tg.CloudStorage ? tg.CloudStorage : null;
   let cloud = cloudApi;
 
   const cs = (method, ...args) => new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), CS_TIMEOUT);
-    try {
-      cloud[method](...args, (err, result) => {
-        clearTimeout(timer);
-        err ? reject(new Error(String(err))) : resolve(result);
-      });
-    } catch (e) { clearTimeout(timer); reject(e); }
+    cloud[method](...args, (err, result) => err ? reject(new Error(String(err))) : resolve(result));
   });
 
   const haptic = type => {
@@ -325,19 +311,9 @@ Birthday party compilation</pre>
   const pad = n => String(n).padStart(2, '0');
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const urlKey = u => u.toLowerCase().replace(/\/+$/, '');
 
-  // Duplicate key: same message regardless of host alias, query string, hash or trailing slash.
-  const urlKey = u => {
-    try {
-      const x = new URL(u);
-      const host = x.hostname.toLowerCase().replace(/^telegram\.(me|dog)$/, 't.me');
-      return host + x.pathname.toLowerCase().replace(/\/+$/, '');
-    } catch { return String(u).toLowerCase().replace(/\/+$/, ''); }
-  };
-
-  // strict = must point at a specific message (used for user input / imports).
-  // Non-strict is used when loading stored data so older entries are never dropped.
-  function normalizeTgUrl(raw, strict) {
+  function normalizeTgUrl(raw) {
     let s = String(raw || '').trim();
     if (/^(t\.me|telegram\.(me|dog))\//i.test(s)) s = 'https://' + s;
     let u;
@@ -345,7 +321,6 @@ Birthday party compilation</pre>
     if (u.protocol !== 'https:') return null;
     if (!['t.me', 'telegram.me', 'telegram.dog'].includes(u.hostname.toLowerCase())) return null;
     if (u.pathname.length < 2) return null;
-    if (strict && !MSG_PATH.test(u.pathname)) return null;
     return u.href.length <= 300 ? u.href : null;
   }
 
@@ -359,9 +334,9 @@ Birthday party compilation</pre>
     return out;
   }
 
-  function normalizeEntry(o, strict) {
+  function normalizeEntry(o) {
     if (!o || typeof o !== 'object') return null;
-    const url = normalizeTgUrl(o.url, strict);
+    const url = normalizeTgUrl(o.url);
     const title = String(o.title || '').trim().slice(0, TITLE_MAX);
     if (!url || !title) return null;
     const id = String(o.id == null ? '' : o.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || newId();
@@ -399,101 +374,23 @@ Birthday party compilation</pre>
     try {
       const raw = JSON.parse(localStorage.getItem(LS_KEY));
       const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.videos) ? raw.videos : []);
-      return list.map(o => normalizeEntry(o)).filter(Boolean);
+      return list.map(normalizeEntry).filter(Boolean);
     } catch { return []; }
   }
   function mirror(next) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); return true; }
-    catch { return false; }
-  }
-
-  // Pending queue: explicit {t:'set', e:entry} / {t:'del', id} operations recorded while the
-  // cloud was unreachable. Replayed on the next successful load, so offline edits win over the
-  // stale cloud copy and offline deletes stay deleted.
-  const opId = op => op.t === 'set' ? op.e.id : op.id;
-  function coalesce(list) {
-    const m = new Map();
-    for (const op of list) { m.delete(opId(op)); m.set(opId(op), op); }
-    return [...m.values()];
-  }
-  function readPending() {
     try {
-      const raw = JSON.parse(localStorage.getItem(LS_PENDING));
-      if (!Array.isArray(raw)) return [];
-      const out = [];
-      for (const op of raw) {
-        if (op && op.t === 'set') { const e = normalizeEntry(op.e); if (e) out.push({ t: 'set', e }); }
-        else if (op && op.t === 'del' && typeof op.id === 'string' && op.id) out.push({ t: 'del', id: op.id });
-      }
-      return coalesce(out);
-    } catch { return []; }
-  }
-  function writePending(list) {
-    try {
-      if (list.length) localStorage.setItem(LS_PENDING, JSON.stringify(list));
-      else localStorage.removeItem(LS_PENDING);
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+      if (cloudApi && !cloud) localStorage.setItem(LS_DIRTY, '1');
       return true;
     } catch { return false; }
-  }
-  const queueOp = op => writePending(coalesce([...readPending(), op]));
-  function dropPending(id) {
-    const cur = readPending();
-    const next = cur.filter(o => opId(o) !== id);
-    if (next.length !== cur.length) writePending(next);
-  }
-
-  // Replays pending ops against the cloud and returns the merged item list.
-  async function syncPending(items, hasMeta) {
-    let pending = readPending();
-    const byId = new Map(items.map(v => [v.id, v]));
-
-    // One-time migration of pre-cloud local data (shared marker, so it happens once per account).
-    if (!hasMeta) {
-      const haveUrls = new Set(items.map(v => urlKey(v.url)));
-      for (const v of readMirror()) {
-        const k = urlKey(v.url);
-        if (haveUrls.has(k)) continue;
-        haveUrls.add(k);
-        pending.push({ t: 'set', e: byId.has(v.id) ? { ...v, id: newId() } : v });
-      }
-      pending = coalesce(pending);
-    }
-
-    const left = [];
-    let failed = false;
-    for (const op of pending) {
-      if (op.t === 'set') {
-        if (!byId.has(op.e.id) && byId.size >= CS_MAX) continue; // cloud is full, drop it
-        byId.set(op.e.id, op.e);
-        if (!failed) {
-          try { await cs('setItem', CS_PREFIX + op.e.id, JSON.stringify(op.e)); continue; }
-          catch { failed = true; }
-        }
-        left.push(op);
-      } else {
-        byId.delete(op.id);
-        if (!failed) {
-          try { await cs('removeItem', CS_PREFIX + op.id); continue; }
-          catch { failed = true; }
-        }
-        left.push(op);
-      }
-    }
-    writePending(left);
-    if (!hasMeta && !left.length) { try { await cs('setItem', META_KEY, '1'); } catch {} }
-    if (left.length) state.mode = 'degraded';
-    return [...byId.values()];
   }
 
   async function load() {
     cloud = cloudApi;
-    try { localStorage.removeItem(LS_DIRTY); } catch {}
     let items = null;
     if (cloud) {
       try {
-        const allKeys = await cs('getKeys');
-        const hasMeta = allKeys.includes(META_KEY);
-        const keys = allKeys.filter(k => k.startsWith(CS_PREFIX));
+        const keys = (await cs('getKeys')).filter(k => k.startsWith(CS_PREFIX));
         items = [];
         const batches = [];
         for (let i = 0; i < keys.length; i += 50) batches.push(cs('getItems', keys.slice(i, i + 50)));
@@ -503,7 +400,6 @@ Birthday party compilation</pre>
           }
         }
         state.mode = 'cloud';
-        items = await syncPending(items, hasMeta);
       } catch (e) {
         console.warn('Cloud storage unavailable', e);
         cloud = null;
@@ -514,39 +410,40 @@ Birthday party compilation</pre>
       state.mode = 'local';
     }
 
-    if (items === null) items = readMirror(); // already contains any offline changes
+    if (items === null) {
+      items = readMirror();
+    } else {
+      // Push local-only data to the cloud: first run (migration) or changes made while offline.
+      let dirty = false;
+      try { dirty = localStorage.getItem(LS_DIRTY) === '1'; } catch {}
+      if (items.length === 0 || dirty) {
+        const have = new Set(items.map(v => urlKey(v.url)));
+        const haveIds = new Set(items.map(v => v.id));
+        let failed = false;
+        for (const v of readMirror()) {
+          if (have.has(urlKey(v.url)) || items.length >= CS_MAX) continue;
+          if (haveIds.has(v.id)) v.id = newId();
+          try { await cs('setItem', CS_PREFIX + v.id, JSON.stringify(v)); items.push(v); haveIds.add(v.id); }
+          catch { failed = true; break; }
+        }
+        if (!failed) { try { localStorage.removeItem(LS_DIRTY); } catch {} }
+      }
+    }
     state.videos = dedupe(items);
     mirror(state.videos);
-  }
-
-  // Never run two loads at once (e.g. rapid foreground/background switches).
-  let loadPromise = null;
-  function loadOnce() {
-    if (!loadPromise) loadPromise = load().finally(() => { loadPromise = null; });
-    return loadPromise;
   }
 
   async function commitSave(entry) {
     const exists = state.videos.some(v => v.id === entry.id);
     if (!exists && cloud && state.videos.length >= CS_MAX) throw new Error('limit');
     const next = exists ? state.videos.map(v => v.id === entry.id ? entry : v) : [entry, ...state.videos];
-    if (cloud) {
-      await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
-      dropPending(entry.id);
-    } else if (cloudApi) {
-      if (!queueOp({ t: 'set', e: entry })) throw new Error('local-write-failed');
-    }
+    if (cloud) await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
     if (!mirror(next) && !cloud) throw new Error('local-write-failed');
     state.videos = next;
   }
   async function commitDelete(id) {
     const next = state.videos.filter(v => v.id !== id);
-    if (cloud) {
-      await cs('removeItem', CS_PREFIX + id);
-      dropPending(id);
-    } else if (cloudApi) {
-      if (!queueOp({ t: 'del', id })) throw new Error('local-write-failed');
-    }
+    if (cloud) await cs('removeItem', CS_PREFIX + id);
     if (!mirror(next) && !cloud) throw new Error('local-write-failed');
     state.videos = next;
   }
@@ -596,21 +493,8 @@ Birthday party compilation</pre>
 
   function render() {
     const total = state.videos.length;
-    const counts = new Map();
-    for (const v of state.videos) for (const t of v.tags) counts.set(t, (counts.get(t) || 0) + 1);
-    const allTags = [...counts.keys()];
-
-    // Only prune saved filters once the library has actually loaded.
-    if (!state.loading) state.tags = state.tags.filter(t => counts.has(t));
-
-    // Keep the chip row usable: top CHIP_MAX tags by frequency, plus anything selected.
-    // (Any tag can still be found through the search box.)
-    const chipSet = new Set([...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, CHIP_MAX).map(e => e[0]));
-    for (const t of state.tags) chipSet.add(t);
-    const chipTags = [...chipSet].sort((a, b) => a.localeCompare(b));
-
+    const allTags = [...new Set(state.videos.flatMap(v => v.tags))].sort((a, b) => a.localeCompare(b));
+    state.tags = state.tags.filter(t => allTags.includes(t));
     const list = state.loading ? [] : visible();
 
     $('counter').textContent = state.loading ? 'Loading catalog...'
@@ -621,7 +505,7 @@ Birthday party compilation</pre>
       : state.mode === 'degraded' ? 'Cloud sync unavailable. Changes are saved on this device and will sync later.'
       : 'Saved on this device only.';
 
-    $('tagFilters').replaceChildren(...['All', ...chipTags].map(t => {
+    $('tagFilters').replaceChildren(...['All', ...allTags].map(t => {
       const active = t === 'All' ? state.tags.length === 0 : state.tags.includes(t);
       return el('button', { class: 'chip' + (active ? ' on' : ''), type: 'button', 'data-tag': t, 'aria-pressed': String(active), text: t });
     }));
@@ -681,8 +565,8 @@ Birthday party compilation</pre>
     const fail = msg => { $('formError').textContent = msg; haptic('error'); };
     const title = $('newTitle').value.trim();
     if (!title) return fail('Enter a title.');
-    const url = normalizeTgUrl($('newUrl').value, true);
-    if (!url) return fail('Enter a link to a specific Telegram message, like https://t.me/c/123456789/42.');
+    const url = normalizeTgUrl($('newUrl').value);
+    if (!url) return fail('Enter a Telegram message link that starts with https://t.me/.');
     const dup = state.videos.find(v => urlKey(v.url) === urlKey(url) && v.id !== editingId);
     if (dup) return fail(`This link is already saved as "${dup.title}".`);
 
@@ -738,36 +622,24 @@ Birthday party compilation</pre>
     try { ok = document.execCommand('copy'); } catch {}
     backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
   }
-
-  // ----- Auto tags -----
-  // Tags come from words in titles, but only words that are shared across several titles
-  // (or already used in the library) become tags, so a big import doesn't create hundreds
-  // of one-off tags. Small batches (<= 10 titles) just use their own words.
-  const STOP = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
-
-  function tokenize(title) {
+  // Generate tags from significant words in the title (fully generic)
+  function autoTags(title) {
+    const stop = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
+    const words = String(title || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w));
     const seen = new Set();
-    const out = [];
-    for (const w of String(title || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)) {
-      if (w.length < 3 || STOP.has(w) || /^\d+$/.test(w) || seen.has(w)) continue;
+    const tags = [];
+    for (const w of words) {
+      if (seen.has(w)) continue;
       seen.add(w);
-      out.push(w);
+      tags.push('#' + w);
+      if (tags.length >= 6) break;
     }
-    return out;
-  }
-
-  function makeAutoTagger(titles) {
-    const small = titles.length <= 10;
-    const cap = small ? 3 : 4;
-    const df = new Map();
-    for (const t of titles) for (const w of tokenize(t)) df.set(w, (df.get(w) || 0) + 1);
-    const known = new Set(state.videos.flatMap(v => v.tags));
-    const score = w => (known.has('#' + w) ? 1000 : 0) + (df.get(w) || 0);
-    return title => tokenize(title)
-      .filter(w => small || (df.get(w) || 0) >= 2 || known.has('#' + w))
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, cap)
-      .map(w => '#' + w);
+    if (!tags.length) tags.push('#video');
+    return tags;
   }
 
   // Parse bulk plain-text format:
@@ -778,16 +650,23 @@ Birthday party compilation</pre>
     const items = [];
     let i = 0;
     while (i < lines.length) {
-      const url = lines[i] ? normalizeTgUrl(lines[i], true) : null;
-      if (!url) { i++; continue; }
-      let j = i + 1;
-      while (j < lines.length && !lines[j]) j++;
-      // The next non-empty line is the title unless it is itself a Telegram link.
-      if (j < lines.length && !normalizeTgUrl(lines[j])) {
-        items.push({ url, title: lines[j].slice(0, TITLE_MAX) });
-        i = j + 1;
+      const line = lines[i];
+      if (!line) { i++; continue; }
+      const url = normalizeTgUrl(line);
+      if (url) {
+        let title = '';
+        let j = i + 1;
+        while (j < lines.length && !lines[j]) j++;
+        if (j < lines.length && !normalizeTgUrl(lines[j])) {
+          title = lines[j].slice(0, TITLE_MAX);
+          i = j + 1;
+        } else {
+          i++;
+        }
+        if (title) items.push({ url, title, tags: autoTags(title) });
+        else i++;
       } else {
-        i++; // link without a title: skip just this line
+        i++;
       }
     }
     return items;
@@ -806,69 +685,55 @@ Birthday party compilation</pre>
     return null;
   }
 
-  // &amp; is decoded last so "&amp;lt;" becomes "&lt;" and not "<".
-  function decodeEntities(s) {
-    return s
-      .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-      .replace(/&#x([0-9a-f]+);/gi, (m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return m; } })
-      .replace(/&#(\d+);/g, (m, d) => { try { return String.fromCodePoint(+d); } catch { return m; } })
-      .replace(/&amp;/g, '&');
-  }
-
   function parseTelegramHtml(text) {
     const channelId = getChannelIdFromLibrary();
     if (!channelId) {
       return { error: 'Add at least one video from this channel first (so the app knows the channel ID), then try importing the HTML again.' };
     }
 
-    // Split into one block per message first, so an id can never be paired with another message's caption.
-    const blocks = text.split(/(?=<div class="message )/i);
+    // Extract message blocks that contain a video and a text caption
+    // Pattern: id="message123" ... media_video ... <div class="text">Caption</div>
     const items = [];
-    const seenIds = new Set();
+    const msgRe = /id="message(\d+)"[\s\S]*?(?=id="message\d+"|<\/div>\s*<\/div>\s*<\/div>\s*<\/body>|$)/gi;
+    let match;
+    const seenTitles = new Set();
 
-    for (const b of blocks) {
-      const idm = b.match(/\bid="message(\d+)"/i);
-      if (!idm || !/media_video/i.test(b)) continue;
-      const capm = b.match(/<div class="text">([\s\S]*?)<\/div>/i);
-      if (!capm) continue;
-      const msgId = idm[1];
-      if (seenIds.has(msgId)) continue;
+    // Simpler approach: find all message IDs that have both media_video and a nearby text div
+    const videoMsgRe = /id="message(\d+)"[\s\S]{0,2500}?media_video[\s\S]{0,1500}?<div class="text">\s*([^<]+?)\s*<\/div>/gi;
 
-      const title = decodeEntities(capm[1].replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ''))
-        .replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX);
-      if (title.length < 2 || /^channel\b/i.test(title)) continue;
+    while ((match = videoMsgRe.exec(text)) !== null) {
+      const msgId = match[1];
+      let title = match[2].replace(/\s+/g, ' ').trim();
+      // Decode common HTML entities
+      title = title
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .trim()
+        .slice(0, TITLE_MAX);
 
-      seenIds.add(msgId);
-      items.push({ url: `https://t.me/c/${channelId}/${msgId}`, title });
+      if (!title || title.length < 2) continue;
+      // Skip pure service-looking short texts
+      if (/^channel\b/i.test(title)) continue;
+
+      const key = title.toLowerCase();
+      if (seenTitles.has(key)) continue;
+      seenTitles.add(key);
+
+      const url = `https://t.me/c/${channelId}/${msgId}`;
+      items.push({ url, title, tags: autoTags(title) });
     }
+
     return { items };
   }
 
-  // Reads a chosen file as text, then imports it.
-  const IMPORT_FILE_MAX = 20 * 1024 * 1024; // 20 MB
-  function readFileText(file) {
-    if (file.text) return file.text();
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = () => reject(r.error || new Error('read failed'));
-      r.readAsText(file);
-    });
-  }
-  async function importFromFile(file) {
-    if (!file) return;
-    if (file.size > IMPORT_FILE_MAX) return backupMsg('That file is too large (over 20 MB).', true);
-    backupMsg('Reading ' + file.name + '...');
-    let text;
-    try { text = await readFileText(file); }
-    catch { return backupMsg('Could not read that file. Try again.', true); }
-    await importBackup(text.replace(/^\uFEFF/, ''));
-  }
-
-  async function importBackup(text) {
-    const rawText = String(text == null ? $('backupText').value : text).trim();
-    if (!rawText) return backupMsg('That file is empty. Choose a backup .txt/.json file, a link list, or a Telegram messages.html export.', true);
+  async function importBackup() {
+    const rawText = $('backupText').value.trim();
+    if (!rawText) return backupMsg('Paste a backup JSON, bulk list, or Telegram HTML export first.', true);
 
     let list = null;
     let source = '';
@@ -886,9 +751,7 @@ Birthday party compilation</pre>
       if (result.error) return backupMsg(result.error, true);
       list = result.items;
       source = 'telegram-html';
-      if (!list.length) {
-        return backupMsg('No video captions found in this Telegram export.', true);
-      }
+      if (!list.length) return backupMsg('No video captions found in this Telegram export.', true);
     }
 
     // 3) Fallback to bulk plain-text
@@ -900,51 +763,89 @@ Birthday party compilation</pre>
       }
     }
 
-    const strict = source !== 'json'; // backups may contain older links; keep those importable
-    const needTags = r => !(r && Array.isArray(r.tags) && r.tags.length);
-    const tagger = makeAutoTagger(list.filter(r => r && needTags(r)).map(r => r.title));
-
+    // Normalize + filter duplicates up front
     const seen = new Set(state.videos.map(v => urlKey(v.url)));
     const ids = new Set(state.videos.map(v => v.id));
-    const base = Date.now();
-    let added = 0, skipped = 0, processed = 0, stopped = '';
+    const toAdd = [];
 
     for (const raw of list) {
-      const r = raw && typeof raw === 'object' ? raw : {};
-      const e = normalizeEntry({
-        id: r.id,
-        title: r.title,
-        url: r.url,
-        tags: needTags(r) ? tagger(r.title) : r.tags,
-        date: r.date,
-        // Distinct, increasing timestamps keep imported items in file order when sorting.
-        created: Number.isFinite(r.created) ? r.created : base + processed
-      }, strict);
-      if (!e) { skipped++; processed++; continue; }
-      if (seen.has(urlKey(e.url))) { skipped++; processed++; continue; }
-      if (ids.has(e.id)) e.id = newId();
-      try {
-        await commitSave(e);
-        seen.add(urlKey(e.url));
-        ids.add(e.id);
-        added++;
-        processed++;
-      } catch (err) {
-        stopped = err && err.message === 'limit'
-          ? 'the catalog is full (1000 videos)'
-          : 'a save error occurred (check your connection)';
-        break;
+      let e;
+      if (raw && raw.url && raw.title) {
+        e = normalizeEntry({
+          id: raw.id,
+          title: raw.title,
+          url: raw.url,
+          tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : autoTags(raw.title),
+          date: raw.date,
+          created: raw.created
+        });
+      } else {
+        e = normalizeEntry(raw);
       }
+      if (!e) continue;
+      if (seen.has(urlKey(e.url))) continue;
+      if (ids.has(e.id)) e.id = newId();
+      seen.add(urlKey(e.url));
+      ids.add(e.id);
+      toAdd.push(e);
+    }
+
+    if (!toAdd.length) {
+      return backupMsg(`No new videos to add (${list.length} already in library or invalid).`, true);
+    }
+
+    // --- Fast path: write everything to local mirror first ---
+    const next = [...toAdd, ...state.videos];
+    state.videos = next;
+    mirror(next);
+    try { localStorage.setItem(LS_DIRTY, '1'); } catch {}
+    render();
+
+    backupMsg(`Saved ${toAdd.length} videos locally. Syncing to cloud…`);
+
+    // --- Slow path: sync to Telegram CloudStorage in small batches ---
+    if (cloud) {
+      const BATCH = 20;
+      const DELAY = 400; // ms between batches to avoid rate limits
+      let synced = 0;
+      let failed = 0;
+
+      for (let i = 0; i < toAdd.length; i += BATCH) {
+        const batch = toAdd.slice(i, i + BATCH);
+        for (const entry of batch) {
+          try {
+            await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
+            synced++;
+          } catch {
+            failed++;
+          }
+        }
+        backupMsg(`Syncing… ${Math.min(i + BATCH, toAdd.length)} / ${toAdd.length}`);
+        if (i + BATCH < toAdd.length) {
+          await new Promise(r => setTimeout(r, DELAY));
+        }
+      }
+
+      if (failed === 0) {
+        try { localStorage.removeItem(LS_DIRTY); } catch {}
+        state.mode = 'cloud';
+      }
+
+      const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+      backupMsg(
+        `Done${srcNote}. Added ${toAdd.length} videos` +
+        (failed ? ` (${failed} could not sync to cloud, kept locally).` : '.'),
+        failed > 0
+      );
+    } else {
+      const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+      backupMsg(`Done${srcNote}. Added ${toAdd.length} videos (saved on this device).`);
     }
 
     render();
-    const total = list.length;
-    const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
-    let msg = `Added ${added} of ${total}${srcNote}. ${skipped} skipped (duplicates or invalid).`;
-    if (stopped) msg += ` Stopped early because ${stopped}; ${total - processed} not processed.`;
-    backupMsg(msg, !!stopped || (added === 0 && skipped > 0));
-    if (added) haptic('success');
+    if (toAdd.length) haptic('success');
   }
+
 
   // ---------- Events ----------
   document.addEventListener('click', e => {
@@ -971,17 +872,16 @@ Birthday party compilation</pre>
     else if (t.dataset.action === 'delete') deleteVideo(v.id);
   });
 
-  let toastTimer, toastHideTimer;
+  let toastTimer;
   function showToast(message) {
     const toast = $('toast');
     clearTimeout(toastTimer);
-    clearTimeout(toastHideTimer);
     toast.textContent = message;
     toast.hidden = false;
     requestAnimationFrame(() => toast.classList.add('show'));
     toastTimer = setTimeout(() => {
       toast.classList.remove('show');
-      toastHideTimer = setTimeout(() => { toast.hidden = true; }, 180);
+      setTimeout(() => { toast.hidden = true; }, 180);
     }, 1800);
   }
 
@@ -1002,14 +902,7 @@ Birthday party compilation</pre>
   $('cancelBtn').addEventListener('click', closeModal);
   $('saveBtn').addEventListener('click', saveForm);
   $('copyBtn').addEventListener('click', copyBackup);
-  $('importBtn').addEventListener('click', () => { backupMsg(''); $('importFile').click(); });
-  $('importFile').addEventListener('change', async e => {
-    const input = e.target;
-    const file = input.files && input.files[0];
-    try { await importFromFile(file); }
-    finally { input.value = ''; } // allow choosing the same file again
-  });
-  $('importPasteBtn').addEventListener('click', () => importBackup());
+  $('importBtn').addEventListener('click', importBackup);
   $('backupClose').addEventListener('click', closeModal);
 
   for (const id of ['formModal', 'backupModal']) {
@@ -1031,7 +924,7 @@ Birthday party compilation</pre>
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && !state.loading && !activeModal && !saving) {
       const y = window.scrollY;
-      try { await loadOnce(); } catch (e) { console.error(e); }
+      await load();
       render();
       window.scrollTo(0, y);
     }
@@ -1044,16 +937,14 @@ Birthday party compilation</pre>
         tg.ready();
         tg.expand();
         if (has('7.7')) tg.disableVerticalSwipes();
-        if (has('6.1')) tg.BackButton.onClick(closeModal);
-        // The app is hard-coded dark, so keep Telegram's chrome dark too (custom colors need 6.9).
-        if (has('6.9')) { tg.setHeaderColor('#07111f'); tg.setBackgroundColor('#07111f'); }
+        if (has('6.1')) { tg.setHeaderColor('bg_color'); tg.BackButton.onClick(closeModal); }
       } catch (e) { console.warn(e); }
     }
     readPrefs();
     $('searchBox').value = state.query;
     $('sortSel').value = state.sort;
     render();
-    try { await loadOnce(); } catch (e) { console.error(e); state.videos = readMirror(); state.mode = 'local'; }
+    try { await load(); } catch (e) { console.error(e); state.videos = readMirror(); state.mode = 'local'; }
     state.loading = false;
     render();
   }
