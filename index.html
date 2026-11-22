@@ -7,170 +7,246 @@
 <title>Family Video Vault</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  :root {
-    --bg: #07111f;
-    --card: rgba(255,255,255,.10);
-    --card-strong: rgba(255,255,255,.15);
-    --text: #f8fbff;
-    --muted: #a9b7ca;
-    --accent: #4da3ff;
-    --accent-text: #ffffff;
-    --danger: #ff7d8d;
-    --line: rgba(255,255,255,.16);
-    --chip: rgba(255,255,255,.09);
-    --glass-shadow: 0 18px 50px rgba(0,0,0,.28);
+  :root{
+    --bg:#090b10;
+    --panel:#11141b;
+    --panel2:#171b24;
+    --text:#f5f7fb;
+    --muted:#9da5b5;
+    --accent:#e50914;
+    --accent2:#ff2a35;
+    --line:rgba(255,255,255,.10);
+    --chip:#191d26;
+    --shadow:0 18px 45px rgba(0,0,0,.34);
   }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  html, body { margin: 0; min-height: 100%; }
-  body {
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{margin:0;min-height:100%}
+  body{
     background:
-      radial-gradient(circle at 15% 10%, rgba(45,125,255,.34), transparent 32rem),
-      radial-gradient(circle at 85% 20%, rgba(119,74,255,.24), transparent 28rem),
-      radial-gradient(circle at 50% 100%, rgba(0,210,255,.13), transparent 30rem),
-      #07111f;
-    color: var(--text);
-    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh;
-    -webkit-text-size-adjust: 100%;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right)
-             calc(max(.65rem, env(safe-area-inset-bottom)) + 5.2rem) env(safe-area-inset-left);
-    overflow-x: hidden;
+      radial-gradient(circle at 50% -10%,rgba(229,9,20,.14),transparent 30rem),
+      linear-gradient(180deg,#090b10 0%,#0a0c11 55%,#08090d 100%);
+    color:var(--text);
+    font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;
+    -webkit-text-size-adjust:100%;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+      calc(max(.75rem,env(safe-area-inset-bottom))+5rem) env(safe-area-inset-left);
+    overflow-x:hidden;
   }
-  body::before, body::after {
-    content: ""; position: fixed; border-radius: 50%; pointer-events: none; z-index: -1;
-    filter: blur(8px); opacity: .6;
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+    background:linear-gradient(180deg,transparent 0 70%,rgba(0,0,0,.28));
   }
-  body::before { width: 180px; height: 180px; background: rgba(45,156,255,.18); top: 12%; left: -70px; }
-  body::after { width: 220px; height: 220px; background: rgba(170,70,255,.13); right: -100px; bottom: 8%; }
-  .app { max-width: 32rem; margin: 0 auto; padding: 1rem .9rem 1.5rem; }
-  .muted { color: var(--muted); }
-  .small { font-size: 11px; }
-  p { margin: 0; }
+  .app{max-width:58rem;margin:0 auto;padding:1rem .9rem 2rem}
+  .muted{color:var(--muted)}
+  .small{font-size:11px}
+  p{margin:0}
 
-  header {
-    display: flex; justify-content: space-between; align-items: center; gap: .75rem;
-    margin: .25rem 0 1rem; padding: .2rem .1rem;
+  header{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;
+    margin:.2rem 0 1.15rem;padding:.1rem 0;
   }
-  h1 { font-size: 1.35rem; margin: 0 0 .2rem; letter-spacing: -.02em; }
-  #counter { font-size: 12px; }
-  .head-actions { display: flex; gap: .45rem; flex-shrink: 0; }
+  h1{font-size:1.5rem;margin:0 0 .2rem;letter-spacing:-.03em}
+  #counter{font-size:12px}
+  .head-actions{display:flex;gap:.45rem;flex-shrink:0}
+  .btn{
+    border:1px solid var(--line);border-radius:9px;padding:.55rem .78rem;
+    font-size:12px;font-weight:700;min-height:38px;background:var(--panel2);
+    color:var(--text);box-shadow:0 5px 18px rgba(0,0,0,.16)
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent2)}
+  .btn.ghost:hover{background:#202530}
+  .btn:disabled{opacity:.5;cursor:default}
 
-  button, input, select, textarea { font: inherit; color: inherit; }
-  button { cursor: pointer; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hero{
+    position:relative;overflow:hidden;border-radius:15px;margin-bottom:1rem;
+    min-height:155px;background:
+      linear-gradient(90deg,rgba(8,10,14,.98) 0%,rgba(8,10,14,.82) 43%,rgba(8,10,14,.25) 100%),
+      radial-gradient(circle at 75% 35%,rgba(229,9,20,.25),transparent 25rem),
+      #11141b;
+    border:1px solid var(--line);display:flex;align-items:flex-end;padding:1.15rem;
+  }
+  .hero-copy{max-width:34rem}
+  .eyebrow{font-size:10px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#ff6970;margin-bottom:.35rem}
+  .hero h2{font-size:1.3rem;margin:0 0 .25rem;letter-spacing:-.02em}
+  .hero p{font-size:12px;color:#b5bcc8}
 
-  .btn {
-    border: 1px solid var(--line); border-radius: 14px; padding: .55rem .8rem;
-    font-size: 12px; font-weight: 650; min-height: 38px;
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 8px 25px rgba(0,0,0,.16);
+  .controls{
+    display:flex;gap:.55rem;margin-bottom:.7rem;position:sticky;top:0;z-index:8;
+    padding:.35rem 0;background:linear-gradient(#090b10 70%,transparent)
   }
-  .btn.primary { background: linear-gradient(135deg, rgba(63,155,255,.95), rgba(91,92,255,.88)); color: var(--accent-text); border-color: rgba(255,255,255,.24); }
-  .btn.ghost { background: rgba(255,255,255,.08); color: var(--text); }
-  .btn:disabled { opacity: .5; cursor: default; }
+  input[type="text"],input[type="search"],select,textarea{
+    background:#151922;border:1px solid var(--line);border-radius:8px;
+    padding:.72rem .85rem;width:100%;font-size:16px;color:var(--text)
+  }
+  input::placeholder,textarea::placeholder{color:#737c8c}
+  #searchBox{flex:1;min-width:0;font-size:14px}
+  #sortSel{width:auto;min-width:105px;font-size:14px}
 
-  .controls { display: flex; gap: .5rem; margin-bottom: .65rem; }
-  input[type="text"], input[type="search"], select, textarea {
-    background: rgba(255,255,255,.075); border: 1px solid rgba(255,255,255,.14); border-radius: 16px;
-    padding: .72rem .85rem; width: 100%; font-size: 16px;
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+  .filters{
+    display:flex;gap:.45rem;overflow-x:auto;padding:.15rem .05rem .65rem;
+    margin-bottom:.1rem;scrollbar-width:none
   }
-  input::placeholder, textarea::placeholder { color: var(--muted); }
-  #searchBox { flex: 1; min-width: 0; font-size: 14px; }
-  #sortSel { width: auto; min-width: 104px; font-size: 14px; }
+  .filters::-webkit-scrollbar{display:none}
+  .chip{
+    white-space:nowrap;border:1px solid var(--line);border-radius:999px;
+    padding:.42rem .75rem;font-size:11px;font-weight:700;background:var(--chip);
+    color:#cfd5df
+  }
+  .chip.on{background:#fff;color:#090b10;border-color:#fff}
+  .filter-status{
+    min-height:28px;display:flex;align-items:center;justify-content:space-between;gap:.6rem;
+    margin:.05rem 0 .65rem;font-size:11px;color:var(--muted)
+  }
+  .selected-tags{display:flex;gap:.35rem;overflow-x:auto;scrollbar-width:none}
+  .selected-tags::-webkit-scrollbar{display:none}
+  .selected-tag{
+    display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap;
+    border:1px solid rgba(229,9,20,.45);background:rgba(229,9,20,.12);
+    border-radius:999px;padding:.3rem .55rem;color:#ffdadd
+  }
+  .clear-filters{border:0;background:transparent;color:#ff858c;font-size:11px;font-weight:700;padding:.3rem}
 
-  .filters {
-    display: flex; gap: .45rem; overflow-x: auto; padding: .15rem .05rem .55rem;
-    margin-bottom: .15rem; scrollbar-width: none;
+  .section-title{
+    display:flex;justify-content:space-between;align-items:center;margin:.55rem 0 .65rem
   }
-  .filters::-webkit-scrollbar { display: none; }
-  .chip {
-    white-space: nowrap; border: 1px solid rgba(255,255,255,.13); border-radius: 999px;
-    padding: .42rem .75rem; font-size: 12px; font-weight: 550;
-    background: rgba(255,255,255,.07); color: var(--text);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  }
-  .chip.on { background: linear-gradient(135deg, rgba(57,157,255,.95), rgba(102,91,255,.9)); border-color: rgba(255,255,255,.28); box-shadow: 0 7px 22px rgba(57,130,255,.25); }
-  .filter-status {
-    min-height: 28px; display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-    margin: .05rem 0 .65rem; font-size: 11px; color: var(--muted);
-  }
-  .selected-tags { display: flex; gap: .35rem; overflow-x: auto; scrollbar-width: none; }
-  .selected-tags::-webkit-scrollbar { display: none; }
-  .selected-tag {
-    display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap;
-    border: 1px solid rgba(92,173,255,.35); background: rgba(65,151,255,.13);
-    border-radius: 999px; padding: .3rem .55rem; color: #dceeff;
-  }
-  .selected-tag:hover { background: rgba(65,151,255,.22); }
-  .selected-tag .remove { font-size: 13px; line-height: 1; opacity: .8; }
-  .clear-filters { border: 0; background: transparent; color: #8fc5ff; font-size: 11px; font-weight: 650; padding: .3rem; }
+  .section-title h2{font-size:1rem;margin:0;letter-spacing:-.01em}
+  .section-title span{font-size:11px;color:var(--muted)}
 
-  .list { display: grid; gap: .8rem; }
-  .card {
-    position: relative; overflow: hidden; background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.055));
-    border: 1px solid rgba(255,255,255,.16); border-radius: 20px; padding: .85rem;
-    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,.08);
-    backdrop-filter: blur(24px) saturate(125%); -webkit-backdrop-filter: blur(24px) saturate(125%);
+  .list{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem .65rem
   }
-  .card::before { content: ""; position: absolute; width: 120px; height: 120px; right: -55px; top: -55px; border-radius: 50%; background: rgba(82,165,255,.13); pointer-events: none; }
-  .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; position: relative; z-index: 1; }
-  .date { font: 10px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
-  .card-actions { display: flex; gap: .35rem; }
-  .icon {
-    width: 32px; height: 32px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%;
-    background: rgba(255,255,255,.08); color: var(--muted); font-size: 13px;
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  .card{
+    min-width:0;position:relative;background:#11141b;border:1px solid rgba(255,255,255,.08);
+    border-radius:11px;overflow:hidden;box-shadow:var(--shadow);transition:transform .16s ease,border-color .16s ease
   }
-  .icon:hover { color: var(--text); background: rgba(255,255,255,.14); }
-  .icon.danger:hover { color: var(--danger); }
-  h3 { font-size: 1rem; margin: 0 0 .55rem; overflow-wrap: anywhere; position: relative; z-index: 1; }
-  .tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .75rem; position: relative; z-index: 1; }
-  .tag { border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); color: #a9d4ff; border-radius: 999px; padding: .18rem .52rem; font-size: 11px; font-weight: 550; }
-  .tag.on { background: rgba(65,151,255,.24); border-color: rgba(92,173,255,.5); color: #e9f5ff; box-shadow: 0 0 0 1px rgba(92,173,255,.08) inset; }
-  .play {
-    display: block; text-align: center; text-decoration: none; background: linear-gradient(135deg, rgba(61,156,255,.82), rgba(88,92,255,.78));
-    border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 14px; padding: .72rem;
-    font-size: 13px; font-weight: 650; position: relative; z-index: 1; box-shadow: 0 10px 26px rgba(49,111,255,.18);
+  .card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.18)}
+  .thumb-wrap{
+    position:relative;aspect-ratio:16/9;background:#1b2029;overflow:hidden;cursor:pointer
   }
-  .play:hover { filter: brightness(1.08); }
-  .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; backdrop-filter: blur(18px); }
+  .thumb{
+    width:100%;height:100%;display:block;object-fit:cover;background:#1b2029;
+    transition:transform .25s ease,filter .25s ease
+  }
+  .card:hover .thumb{transform:scale(1.025);filter:brightness(1.05)}
+  .thumb-placeholder{
+    width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(circle at 50% 35%,rgba(229,9,20,.25),transparent 45%),
+      linear-gradient(135deg,#171b24,#0f1218);
+    color:#70798a;font-size:2rem
+  }
+  .play-overlay{
+    position:absolute;left:.6rem;bottom:.6rem;width:34px;height:34px;border-radius:50%;
+    display:grid;place-items:center;background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.25);
+    color:#fff;font-size:13px;backdrop-filter:blur(8px);pointer-events:none
+  }
+  .card-body{padding:.68rem .7rem .75rem}
+  .card-top{display:flex;justify-content:space-between;align-items:center;gap:.4rem;margin-bottom:.25rem}
+  .date{font:9px ui-monospace,Menlo,Consolas,monospace;color:#7e8796}
+  .card-actions{display:flex;gap:.25rem}
+  .icon{
+    width:28px;height:28px;border:1px solid var(--line);border-radius:50%;
+    background:#191d25;color:#aeb6c4;font-size:12px
+  }
+  .icon:hover{color:#fff;background:#242a34}
+  .icon.danger:hover{color:#ff7d87}
+  h3{
+    font-size:.9rem;margin:0 0 .48rem;line-height:1.25;overflow-wrap:anywhere;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+  }
+  .tags{display:flex;flex-wrap:wrap;gap:.28rem;margin-bottom:.6rem}
+  .tag{
+    border:1px solid rgba(255,255,255,.08);background:#191d25;color:#aeb7c5;
+    border-radius:999px;padding:.16rem .43rem;font-size:9px;font-weight:600
+  }
+  .tag.on{background:rgba(229,9,20,.18);border-color:rgba(229,9,20,.5);color:#ffdadd}
+  .play{
+    display:block;text-align:center;text-decoration:none;background:#e50914;
+    border:1px solid #e50914;color:#fff;border-radius:7px;padding:.55rem;
+    font-size:11px;font-weight:800
+  }
+  .play:hover{background:#f31b25}
+  .empty{
+    grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--muted);font-size:13px;
+    background:#11141b;border:1px solid var(--line);border-radius:12px
+  }
 
-  .bottom-nav {
-    position: fixed; left: 50%; bottom: max(.65rem, env(safe-area-inset-bottom)); transform: translateX(-50%);
-    width: min(calc(100% - 1.2rem), 32rem); display: flex; justify-content: space-around; gap: .4rem;
-    padding: .5rem; border: 1px solid rgba(255,255,255,.15); border-radius: 22px;
-    background: rgba(8,18,34,.68); backdrop-filter: blur(28px) saturate(150%); -webkit-backdrop-filter: blur(28px) saturate(150%);
-    box-shadow: 0 18px 45px rgba(0,0,0,.35); z-index: 20;
+  .fab{
+    position:fixed;right:max(1rem,calc((100vw - 58rem)/2 + 1rem));
+    bottom:calc(max(.75rem,env(safe-area-inset-bottom)) + 4.55rem);
+    width:52px;height:52px;border:0;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:25px;line-height:1;box-shadow:0 12px 30px rgba(229,9,20,.35);z-index:21
   }
-  .nav-item { flex: 1; border: 0; background: transparent; color: var(--muted); padding: .45rem .25rem; border-radius: 16px; font-size: 10px; font-weight: 600; }
-  .nav-item.active { color: #fff; background: rgba(71,157,255,.14); }
-  .nav-icon { display: block; font-size: 17px; line-height: 1; margin-bottom: .18rem; }
-  .toast {
-    position: fixed; left: 50%; bottom: calc(max(.65rem, env(safe-area-inset-bottom)) + 4.9rem);
-    transform: translate(-50%, 10px); opacity: 0; pointer-events: none; z-index: 60;
-    padding: .6rem .85rem; border: 1px solid rgba(255,255,255,.16); border-radius: 999px;
-    background: rgba(8,18,34,.82); color: var(--text); font-size: 12px; font-weight: 600;
-    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-    box-shadow: 0 12px 35px rgba(0,0,0,.3); transition: opacity .18s ease, transform .18s ease;
-  }
-  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .fab:hover{background:var(--accent2);transform:translateY(-1px)}
 
-  .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; padding: .8rem; background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-  .sheet {
-    width: 100%; max-width: 32rem; max-height: 92%; overflow-y: auto; background: rgba(9,20,37,.82);
-    border: 1px solid rgba(255,255,255,.17); border-radius: 24px; padding: 1.2rem;
-    display: grid; gap: .85rem; box-shadow: 0 24px 70px rgba(0,0,0,.42); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+  .bottom-nav{
+    position:fixed;left:50%;bottom:max(.65rem,env(safe-area-inset-bottom));transform:translateX(-50%);
+    width:min(calc(100% - 1.2rem),38rem);display:flex;justify-content:space-around;gap:.4rem;
+    padding:.45rem;border:1px solid rgba(255,255,255,.1);border-radius:13px;
+    background:rgba(13,16,22,.94);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+    box-shadow:0 15px 40px rgba(0,0,0,.45);z-index:20
   }
-  .sheet h2 { margin: 0; font-size: 1.1rem; }
-  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: .25rem; }
-  textarea { min-height: 11rem; resize: vertical; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
-  .row { display: flex; gap: .5rem; }
-  .row .btn { flex: 1; min-height: 44px; font-size: 14px; }
-  .msg { font-size: 12px; min-height: 1.2em; }
-  .msg.err { color: var(--danger); }
+  .nav-item{
+    flex:1;border:0;background:transparent;color:#8f98a7;padding:.42rem .25rem;border-radius:8px;
+    font-size:9px;font-weight:700
+  }
+  .nav-item.active{color:#fff;background:#1c2029}
+  .nav-icon{display:block;font-size:16px;line-height:1;margin-bottom:.12rem}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(max(.65rem,env(safe-area-inset-bottom))+4.9rem);
+    transform:translate(-50%,10px);opacity:0;pointer-events:none;z-index:60;
+    padding:.6rem .85rem;border:1px solid var(--line);border-radius:999px;
+    background:rgba(15,18,24,.95);color:var(--text);font-size:12px;font-weight:700;
+    box-shadow:0 12px 35px rgba(0,0,0,.4);transition:opacity .18s ease,transform .18s ease
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  .modal{
+    position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;
+    padding:.8rem;background:rgba(0,0,0,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)
+  }
+  .sheet{
+    width:100%;max-width:38rem;max-height:92%;overflow-y:auto;background:#11141b;
+    border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:1.15rem;
+    display:grid;gap:.8rem;box-shadow:0 24px 70px rgba(0,0,0,.55)
+  }
+  .sheet h2{margin:0;font-size:1.1rem}
+  label{display:block;font-size:11px;color:var(--muted);margin-bottom:.25rem}
+  textarea{min-height:11rem;resize:vertical;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+  .row{display:flex;gap:.5rem}
+  .row .btn{flex:1;min-height:44px;font-size:14px}
+  .msg{font-size:12px;min-height:1.2em}
+  .msg.err{color:#ff8b92}
+  .upload-box{
+    border:1px dashed rgba(255,255,255,.18);border-radius:10px;padding:.75rem;
+    background:#151922
+  }
+  .upload-box input{font-size:12px;border:0;padding:.2rem;background:transparent}
+  .preview{
+    margin-top:.6rem;display:none;position:relative;max-width:240px;border-radius:8px;overflow:hidden;
+    border:1px solid var(--line)
+  }
+  .preview.show{display:block}
+  .preview img{display:block;width:100%;height:auto}
+  .preview-remove{
+    position:absolute;right:.35rem;top:.35rem;border:0;border-radius:50%;width:28px;height:28px;
+    background:rgba(0,0,0,.72);color:#fff
+  }
+  code{color:#ffb1b5}
+  @media (min-width:700px){
+    .list{grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem .8rem}
+    .hero{min-height:190px}
+  }
+  @media (max-width:520px){
+    .head-actions .btn.ghost{display:none}
+    .hero{min-height:145px}
+    .hero h2{font-size:1.15rem}
+    .fab{right:1rem}
+  }
 </style>
 </head>
 <body>
@@ -183,9 +259,16 @@
     </div>
     <div class="head-actions">
       <button id="backupBtn" class="btn ghost" type="button">Backup</button>
-      <button id="addBtn" class="btn primary" type="button">+ Add link</button>
     </div>
   </header>
+
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Your private collection</div>
+      <h2>Find the moment. Play it in Telegram.</h2>
+      <p>Visual previews make your family videos easy to recognize without opening each one.</p>
+    </div>
+  </section>
 
   <div class="controls">
     <input type="search" id="searchBox" placeholder="Search titles or tags (e.g. #vacation, birthday)" aria-label="Search videos" autocomplete="off">
@@ -202,7 +285,13 @@
     <span id="filterCount" aria-live="polite"></span>
     <button id="clearFilters" class="clear-filters" type="button" hidden>Clear</button>
   </div>
+  <div class="section-title">
+    <h2 id="libraryHeading">Recently Added</h2>
+    <span id="librarySubheading"></span>
+  </div>
   <section id="videoList" class="list" aria-live="polite"></section>
+
+  <button id="addBtn" class="fab" type="button" aria-label="Add video" title="Add video">+</button>
 
   <nav class="bottom-nav" aria-label="Primary navigation">
     <button class="nav-item active" type="button"><span class="nav-icon">⌂</span>Library</button>
@@ -214,7 +303,7 @@
 <!-- Add / edit -->
 <div id="formModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="formTitle" hidden>
   <div class="sheet">
-    <h2 id="formTitle">Add video link</h2>
+    <h2 id="formTitle">Add video</h2>
     <div>
       <label for="newTitle">Video title</label>
       <input type="text" id="newTitle" maxlength="120" placeholder="e.g. Summer vacation 2024" autocomplete="off">
@@ -226,6 +315,17 @@
     <div>
       <label for="newTags">Hashtags</label>
       <input type="text" id="newTags" maxlength="300" autocapitalize="none" autocomplete="off" placeholder="#vacation #family #2024">
+    </div>
+    <div class="upload-box">
+      <label for="thumbnailInput">Video preview / contact sheet</label>
+      <input type="file" id="thumbnailInput" accept="image/jpeg,image/png,image/webp,image/*">
+      <div class="muted small" style="margin-top:.35rem">
+        Upload the image containing screenshots from the video. It will be used as the Netflix-style thumbnail.
+      </div>
+      <div id="thumbnailPreview" class="preview">
+        <img id="thumbnailPreviewImg" alt="Thumbnail preview">
+        <button id="removeThumbnailBtn" class="preview-remove" type="button" aria-label="Remove thumbnail">×</button>
+      </div>
     </div>
     <p id="formError" class="msg err" role="alert"></p>
     <div class="row">
@@ -241,7 +341,7 @@
     <h2 id="backupTitle">Backup &amp; Bulk Import</h2>
     <p class="muted small">
       <strong>Backup:</strong> Copy the JSON below to save your library.<br>
-      <strong>Import:</strong> Paste a previous backup, a simple link list, <em>or</em> a full Telegram <code>messages.html</code> export.
+      <strong>Import:</strong> Paste a previous backup, a simple link list, <em>or</em> a full Telegram <code>messages.html</code> export. Thumbnail images are preserved in JSON backups.
     </p>
     <p class="muted small" style="margin-top:.4rem">
       Simple list format:
@@ -268,6 +368,9 @@ Birthday party compilation</pre>
 
 <script>
 (() => {
+  // Netflix-style thumbnails: each entry may contain a compressed contact-sheet image
+  // as `thumbnail`. The image is kept in the local mirror and JSON backups.
+
   'use strict';
 
   // ---------- Telegram helpers ----------
@@ -341,9 +444,11 @@ Birthday party compilation</pre>
     if (!url || !title) return null;
     const id = String(o.id == null ? '' : o.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || newId();
     const tags = parseTags(Array.isArray(o.tags) ? o.tags.join(' ') : '');
+    const thumbnail = typeof o.thumbnail === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(o.thumbnail)
+      ? o.thumbnail.slice(0, 220000) : '';
     const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : today();
     const created = Number.isFinite(o.created) ? o.created : (Date.parse(date) || Date.now());
-    return { id, title, url, tags: tags.length ? tags : ['#family'], date, created };
+    return { id, title, url, tags: tags.length ? tags : ['#family'], date, created, thumbnail };
   }
 
   function dedupe(list) {
@@ -474,20 +579,39 @@ Birthday party compilation</pre>
   }
 
   function card(v) {
+    const thumb = v.thumbnail
+      ? el('img', { class: 'thumb', src: v.thumbnail, alt: 'Preview for ' + v.title, loading: 'lazy' })
+      : el('div', { class: 'thumb-placeholder', 'aria-label': 'No thumbnail available', text: '▶' });
+
+    const thumbWrap = el('div', {
+      class: 'thumb-wrap',
+      'data-action': 'open',
+      'data-id': v.id,
+      role: 'button',
+      tabindex: '0',
+      'aria-label': 'Play ' + v.title
+    }, [
+      thumb,
+      el('span', { class: 'play-overlay', 'aria-hidden': 'true', text: '▶' })
+    ]);
+
     return el('article', { class: 'card' }, [
-      el('div', { class: 'card-top' }, [
-        el('span', { class: 'date', text: v.date }),
-        el('div', { class: 'card-actions' }, [
-          el('button', { class: 'icon', type: 'button', 'data-action': 'edit', 'data-id': v.id, 'aria-label': 'Edit ' + v.title, title: 'Edit', text: '✎' }),
-          el('button', { class: 'icon danger', type: 'button', 'data-action': 'delete', 'data-id': v.id, 'aria-label': 'Delete ' + v.title, title: 'Delete', text: '✕' })
-        ])
-      ]),
-      el('h3', { text: v.title }),
-      el('div', { class: 'tags' }, v.tags.map(t => el('button', {
-        class: 'tag' + (state.tags.includes(t) ? ' on' : ''), type: 'button', 'data-tag': t,
-        'aria-pressed': String(state.tags.includes(t)), text: t
-      }))),
-      el('a', { class: 'play', href: v.url, 'data-action': 'open', 'data-id': v.id, text: 'Play in Telegram' })
+      thumbWrap,
+      el('div', { class: 'card-body' }, [
+        el('div', { class: 'card-top' }, [
+          el('span', { class: 'date', text: v.date }),
+          el('div', { class: 'card-actions' }, [
+            el('button', { class: 'icon', type: 'button', 'data-action': 'edit', 'data-id': v.id, 'aria-label': 'Edit ' + v.title, title: 'Edit', text: '✎' }),
+            el('button', { class: 'icon danger', type: 'button', 'data-action': 'delete', 'data-id': v.id, 'aria-label': 'Delete ' + v.title, title: 'Delete', text: '✕' })
+          ])
+        ]),
+        el('h3', { text: v.title }),
+        el('div', { class: 'tags' }, v.tags.map(t => el('button', {
+          class: 'tag' + (state.tags.includes(t) ? ' on' : ''), type: 'button', 'data-tag': t,
+          'aria-pressed': String(state.tags.includes(t)), text: t
+        }))),
+        el('a', { class: 'play', href: v.url, 'data-action': 'open', 'data-id': v.id, text: '▶ Play in Telegram' })
+      ])
     ]);
   }
 
@@ -500,10 +624,15 @@ Birthday party compilation</pre>
     $('counter').textContent = state.loading ? 'Loading catalog...'
       : list.length === total ? `${total} ${total === 1 ? 'video' : 'videos'}`
       : `${list.length} of ${total} videos`;
+    $('libraryHeading').textContent = state.query.trim() || state.tags.length ? 'Search results' : 'Recently Added';
+    $('librarySubheading').textContent = list.length ? `${list.length} ${list.length === 1 ? 'title' : 'titles'}` : '';
     $('storageNote').textContent = state.loading ? ''
       : state.mode === 'cloud' ? 'Synced across your Telegram devices.'
       : state.mode === 'degraded' ? 'Cloud sync unavailable. Changes are saved on this device and will sync later.'
       : 'Saved on this device only.';
+    if (state.videos.some(v => v.thumbnail)) {
+      $('storageNote').textContent += ' Preview images are stored on this device and included in JSON backups.';
+    }
 
     $('tagFilters').replaceChildren(...['All', ...allTags].map(t => {
       const active = t === 'All' ? state.tags.length === 0 : state.tags.includes(t);
@@ -523,7 +652,7 @@ Birthday party compilation</pre>
     const box = $('videoList');
     if (state.loading) { box.replaceChildren(); return; }
     if (total === 0) {
-      box.replaceChildren(el('div', { class: 'empty', text: 'No videos yet. Tap "+ Add link" to save your first Telegram video.' }));
+      box.replaceChildren(el('div', { class: 'empty', text: 'No videos yet. Tap "+" to save your first Telegram video and its preview image.' }));
     } else if (list.length === 0) {
       box.replaceChildren(el('div', { class: 'empty', text: 'No videos match. Clear the search or choose All.' }));
     } else {
@@ -555,9 +684,63 @@ Birthday party compilation</pre>
     $('newTitle').value = v ? v.title : '';
     $('newUrl').value = v ? v.url : '';
     $('newTags').value = v ? v.tags.join(' ') : '';
+    $('thumbnailInput').value = '';
+    setThumbnailPreview(v && v.thumbnail ? v.thumbnail : '');
     $('formError').textContent = '';
     showModal('formModal');
     $('newTitle').focus();
+  }
+
+  let pendingThumbnail = '';
+
+  function setThumbnailPreview(dataUrl) {
+    pendingThumbnail = dataUrl || '';
+    const wrap = $('thumbnailPreview');
+    const img = $('thumbnailPreviewImg');
+    if (pendingThumbnail) {
+      img.src = pendingThumbnail;
+      wrap.classList.add('show');
+    } else {
+      img.removeAttribute('src');
+      wrap.classList.remove('show');
+    }
+  }
+
+  function compressThumbnail(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) return reject(new Error('Please choose an image.'));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read the image.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = 640;
+          const scale = Math.min(1, maxW / img.width);
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL('image/jpeg', 0.72);
+          // Keep thumbnails reasonably small for local storage.
+          if (out.length > 220000) {
+            const smaller = document.createElement('canvas');
+            const s = .72;
+            smaller.width = Math.max(1, Math.round(w * s));
+            smaller.height = Math.max(1, Math.round(h * s));
+            const sctx = smaller.getContext('2d');
+            sctx.drawImage(canvas, 0, 0, smaller.width, smaller.height);
+            resolve(smaller.toDataURL('image/jpeg', 0.65));
+          } else {
+            resolve(out);
+          }
+        };
+        img.onerror = () => reject(new Error('The selected image could not be decoded.'));
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   async function saveForm() {
@@ -578,7 +761,8 @@ Birthday party compilation</pre>
       url,
       tags: tags.length ? tags : ['#family'],
       date: old ? old.date : today(),
-      created: old ? old.created : Date.now()
+      created: old ? old.created : Date.now(),
+      thumbnail: pendingThumbnail || (old ? old.thumbnail || '' : '')
     };
 
     saving = true;
@@ -591,7 +775,9 @@ Birthday party compilation</pre>
     } catch (e) {
       fail(e.message === 'limit'
         ? 'The catalog is full (1000 videos). Remove some to add more.'
-        : 'Could not save. Check your connection and try again.');
+        : e.name === 'QuotaExceededError' || /quota|storage/i.test(String(e.message || ''))
+          ? 'Storage is full. Use smaller preview images or remove some thumbnails.'
+          : 'Could not save. Check your connection and try again.');
     } finally {
       saving = false;
       $('saveBtn').disabled = false;
@@ -777,7 +963,8 @@ Birthday party compilation</pre>
           url: raw.url,
           tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : autoTags(raw.title),
           date: raw.date,
-          created: raw.created
+          created: raw.created,
+          thumbnail: raw.thumbnail
         });
       } else {
         e = normalizeEntry(raw);
@@ -872,6 +1059,14 @@ Birthday party compilation</pre>
     else if (t.dataset.action === 'delete') deleteVideo(v.id);
   });
 
+  document.addEventListener('keydown', e => {
+    const target = e.target.closest('.thumb-wrap');
+    if (!target || !['Enter', ' '].includes(e.key)) return;
+    e.preventDefault();
+    const v = state.videos.find(x => x.id === target.dataset.id);
+    if (v) openLink(v.url);
+  });
+
   let toastTimer;
   function showToast(message) {
     const toast = $('toast');
@@ -901,6 +1096,22 @@ Birthday party compilation</pre>
   });
   $('cancelBtn').addEventListener('click', closeModal);
   $('saveBtn').addEventListener('click', saveForm);
+  $('thumbnailInput').addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      $('formError').textContent = '';
+      const data = await compressThumbnail(file);
+      setThumbnailPreview(data);
+    } catch (err) {
+      $('formError').textContent = err.message || 'Could not process the image.';
+      $('thumbnailInput').value = '';
+    }
+  });
+  $('removeThumbnailBtn').addEventListener('click', () => {
+    setThumbnailPreview('');
+    $('thumbnailInput').value = '';
+  });
   $('copyBtn').addEventListener('click', copyBackup);
   $('importBtn').addEventListener('click', importBackup);
   $('backupClose').addEventListener('click', closeModal);
