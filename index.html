@@ -395,7 +395,11 @@ Family picnic highlights
 
 https://t.me/c/1234567890/57
 Birthday party compilation</pre>
-      <textarea id="importText" spellcheck="false" aria-label="Import data" placeholder="Paste backup JSON or a url + title list…"></textarea>
+      <div class="upload-box">
+        <label for="importFile">Choose a backup file (.json or .txt)</label>
+        <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain">
+      </div>
+      <textarea id="importText" spellcheck="false" aria-label="Import data" placeholder="Or paste backup JSON or a url + title list…"></textarea>
       <p class="muted small" id="importPreview"></p>
       <div class="row">
         <button id="previewImportBtn" class="btn ghost" type="button">Preview</button>
@@ -1215,6 +1219,7 @@ Birthday party compilation</pre>
     pendingImport = null;
     pendingHtml = null;
     $('importText').value = '';
+    $('importFile').value = '';
     $('importPreview').textContent = '';
     $('htmlText').value = '';
     $('htmlPreview').textContent = '';
@@ -1344,6 +1349,17 @@ Birthday party compilation</pre>
   $('copyExportBtn').addEventListener('click', copyExport);
   $('downloadExportBtn').addEventListener('click', downloadExport);
   $('previewImportBtn').addEventListener('click', previewImport);
+  $('importFile').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => backupMsg('Could not read the file.', 'err');
+    reader.onload = () => {
+      $('importText').value = String(reader.result || '');
+      previewImport();
+    };
+    reader.readAsText(file);
+  });
   $('runImportBtn').addEventListener('click', runImport);
   $('previewHtmlBtn').addEventListener('click', previewHtml);
   $('runHtmlBtn').addEventListener('click', runHtmlImport);
