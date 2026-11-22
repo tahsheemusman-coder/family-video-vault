@@ -253,6 +253,12 @@
   .progress{height:6px;background:#0b0e14;border-radius:99px;overflow:hidden}
   .progress-bar{height:100%;width:0;background:var(--accent);transition:width .18s ease}
 
+  /* Settings sheet */
+  .setting-btn{
+    display:flex;align-items:center;gap:.6rem;text-align:left;width:100%;
+    min-height:46px;font-size:14px
+  }
+
   @media (min-width:700px){
     .list{grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem .8rem}
     .hero{min-height:190px}
@@ -309,7 +315,7 @@
   <button id="addBtn" class="fab" type="button" aria-label="Add video" title="Add video">+</button>
 
   <nav class="bottom-nav" aria-label="Primary navigation">
-    <button class="nav-item active" type="button"><span class="nav-icon">⌂</span>Library</button>
+    <button class="nav-item active" type="button" data-nav="library"><span class="nav-icon">⌂</span>Library</button>
     <button class="nav-item" type="button" data-nav="favorites"><span class="nav-icon">♡</span>Favorites</button>
     <button class="nav-item" type="button" data-nav="settings"><span class="nav-icon">⚙</span>Settings</button>
   </nav>
@@ -422,6 +428,19 @@ Birthday party compilation</pre>
   </div>
 </div>
 
+<!-- Settings -->
+<div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <div class="sheet">
+    <h2 id="settingsTitle">Settings</h2>
+    <p class="muted small">Backup &amp; restore</p>
+    <button class="btn setting-btn" type="button" data-setting="export">⬇ Export / Backup</button>
+    <button class="btn setting-btn" type="button" data-setting="import">⬆ Import backup (JSON)</button>
+    <button class="btn setting-btn" type="button" data-setting="bulk">☰ Bulk import (url + title list)</button>
+    <button class="btn setting-btn" type="button" data-setting="html">⌘ Import from Telegram HTML</button>
+    <button id="settingsClose" class="btn ghost" type="button">Close</button>
+  </div>
+</div>
+
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
@@ -504,7 +523,7 @@ Birthday party compilation</pre>
     return tags;
   }
 
-  // FIXED: accept both data URLs and external http(s) URLs
+  // Accepts both data URLs and external http(s) URLs for thumbnails
   function normalizeEntry(o) {
     if (!o || typeof o !== 'object') return null;
     const url = normalizeTgUrl(o.url);
@@ -688,7 +707,7 @@ Birthday party compilation</pre>
     const total = state.videos.length;
     const allTags = [...new Set(state.videos.flatMap(v => v.tags))].sort((a, b) => a.localeCompare(b));
 
-    // FIXED: only prune saved filters once the catalog has loaded,
+    // Only prune saved filters once the catalog has loaded,
     // otherwise allTags is empty on the first render and prefs get wiped.
     if (!state.loading) {
       state.tags = state.tags.filter(t => allTags.includes(t));
@@ -787,8 +806,7 @@ Birthday party compilation</pre>
     $('newTitle').focus();
   }
 
-  // FIXED: entering a URL clears the uploaded data and vice versa,
-  // and clearing the URL also clears the preview if there was no upload.
+  // Entering a URL clears the uploaded data and vice versa.
   function applyThumbnailUrl() {
     const raw = ($('thumbnailUrl').value || '').trim();
     if (!raw) return;
@@ -1117,7 +1135,7 @@ Birthday party compilation</pre>
   async function commitImport(items, source) {
     if (!items || !items.length) return;
 
-    // FIXED: respect CS_MAX before writing anything
+    // Respect CS_MAX before writing anything
     const room = Math.max(0, CS_MAX - state.videos.length);
     let trimmed = 0;
     if (items.length > room) { trimmed = items.length - room; items = items.slice(0, room); }
@@ -1166,7 +1184,7 @@ Birthday party compilation</pre>
     render();
     haptic('success');
 
-    // FIXED: clear stale state in the other tab
+    // Clear stale state in the other tab
     pendingImport = null; pendingHtml = null;
     $('importPreview').textContent = '';
     $('htmlPreview').textContent = '';
@@ -1192,7 +1210,8 @@ Birthday party compilation</pre>
     });
   }
 
-  function openBackup() {
+  // tab: 'export' | 'import' | 'html'; mode: 'json' | 'list' (import tab placeholder)
+  function openBackup(tab = 'export', mode = 'json') {
     pendingImport = null;
     pendingHtml = null;
     $('importText').value = '';
@@ -1204,7 +1223,13 @@ Birthday party compilation</pre>
     backupMsg('');
     setProgress(null);
     showModal('backupModal');
-    switchTab('export');
+    switchTab(tab);
+    if (tab === 'import') {
+      $('importText').placeholder = mode === 'list'
+        ? 'https://t.me/c/1234567890/42\nFamily picnic highlights\n\nhttps://t.me/c/1234567890/57\nBirthday party compilation'
+        : 'Paste backup JSON…';
+      $('importText').focus();
+    }
   }
 
   // ---------- Events ----------
@@ -1253,12 +1278,31 @@ Birthday party compilation</pre>
     }, 1800);
   }
 
+  // Bottom nav: Library / Favorites / Settings
   document.querySelectorAll('[data-nav]').forEach(btn => {
-    btn.addEventListener('click', () => showToast(btn.dataset.nav === 'favorites' ? 'Favorites coming soon.' : 'Settings coming soon.'));
+    btn.addEventListener('click', () => {
+      const n = btn.dataset.nav;
+      if (n === 'settings') showModal('settingsModal');
+      else if (n === 'library') { closeModal(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      else showToast('Favorites coming soon.');
+    });
+  });
+
+  // Settings sheet
+  $('settingsClose').addEventListener('click', closeModal);
+  $('settingsModal').addEventListener('click', e => {
+    if (e.target === $('settingsModal')) return closeModal();
+    const b = e.target.closest('[data-setting]');
+    if (!b) return;
+    const k = b.dataset.setting;
+    if (k === 'export') openBackup('export');
+    else if (k === 'import') openBackup('import', 'json');
+    else if (k === 'bulk') openBackup('import', 'list');
+    else if (k === 'html') openBackup('html');
   });
 
   $('addBtn').addEventListener('click', () => openForm(null));
-  $('backupBtn').addEventListener('click', openBackup);
+  $('backupBtn').addEventListener('click', () => openBackup());
   $('clearFilters').addEventListener('click', () => {
     state.tags = [];
     state.query = '';
