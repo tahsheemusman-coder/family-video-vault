@@ -77,7 +77,7 @@
     display:flex;gap:.55rem;margin-bottom:.7rem;position:sticky;top:0;z-index:8;
     padding:.35rem 0;background:linear-gradient(#090b10 70%,transparent)
   }
-  input[type="text"],input[type="search"],select,textarea{
+  input[type="text"],input[type="search"],input[type="url"],select,textarea{
     background:#151922;border:1px solid var(--line);border-radius:8px;
     padding:.72rem .85rem;width:100%;font-size:16px;color:var(--text)
   }
@@ -221,6 +221,7 @@
   .row .btn{flex:1;min-height:44px;font-size:14px}
   .msg{font-size:12px;min-height:1.2em}
   .msg.err{color:#ff8b92}
+  .msg.ok{color:#7dffb0}
   .upload-box{
     border:1px dashed rgba(255,255,255,.18);border-radius:10px;padding:.75rem;
     background:#151922
@@ -237,6 +238,21 @@
     background:rgba(0,0,0,.72);color:#fff
   }
   code{color:#ffb1b5}
+
+  /* Backup sheet */
+  .tabs{display:flex;gap:.35rem;border-bottom:1px solid var(--line);padding-bottom:.35rem}
+  .tab{flex:1;border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:700;
+    padding:.55rem .4rem;border-radius:8px}
+  .tab.on{background:#1c2029;color:#fff}
+  .tabpane{display:grid;gap:.65rem}
+  .radio-row{display:grid;gap:.4rem}
+  .radio-row label{display:flex;align-items:center;gap:.5rem;font-size:13px;color:var(--text);margin:0}
+  .radio-row input{width:auto;padding:0}
+  .fmt-hint{background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;
+    overflow-x:auto;font-size:11px;line-height:1.35;margin:0}
+  .progress{height:6px;background:#0b0e14;border-radius:99px;overflow:hidden}
+  .progress-bar{height:100%;width:0;background:var(--accent);transition:width .18s ease}
+
   @media (min-width:700px){
     .list{grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem .8rem}
     .hero{min-height:190px}
@@ -317,11 +333,13 @@
       <input type="text" id="newTags" maxlength="300" autocapitalize="none" autocomplete="off" placeholder="#vacation #family #2024">
     </div>
     <div class="upload-box">
-      <label for="thumbnailInput">Video preview / contact sheet</label>
-      <input type="file" id="thumbnailInput" accept="image/jpeg,image/png,image/webp,image/*">
+      <label for="thumbnailUrl">Thumbnail image URL</label>
+      <input type="url" id="thumbnailUrl" maxlength="500" inputmode="url" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="https://example.com/preview.jpg">
       <div class="muted small" style="margin-top:.35rem">
-        Upload the image containing screenshots from the video. It will be used as the Netflix-style thumbnail.
+        Paste a direct link to a preview image (jpg/png/webp). Or upload a file below.
       </div>
+      <label for="thumbnailInput" style="margin-top:.65rem">Or upload an image</label>
+      <input type="file" id="thumbnailInput" accept="image/jpeg,image/png,image/webp,image/*">
       <div id="thumbnailPreview" class="preview">
         <img id="thumbnailPreviewImg" alt="Thumbnail preview">
         <button id="removeThumbnailBtn" class="preview-remove" type="button" aria-label="Remove thumbnail">×</button>
@@ -335,31 +353,72 @@
   </div>
 </div>
 
-<!-- Backup / Bulk Import -->
+<!-- Backup / Import -->
 <div id="backupModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="backupTitle" hidden>
   <div class="sheet">
-    <h2 id="backupTitle">Backup &amp; Bulk Import</h2>
-    <p class="muted small">
-      <strong>Backup:</strong> Copy the JSON below to save your library.<br>
-      <strong>Import:</strong> Paste a previous backup, a simple link list, <em>or</em> a full Telegram <code>messages.html</code> export. Thumbnail images are preserved in JSON backups.
-    </p>
-    <p class="muted small" style="margin-top:.4rem">
-      Simple list format:
-    </p>
-    <pre class="muted small" style="background:rgba(0,0,0,.25);padding:.5rem .7rem;border-radius:10px;overflow-x:auto;font-size:11px;line-height:1.35;margin:0 0 .5rem">https://t.me/c/1234567890/42
+    <h2 id="backupTitle">Backup &amp; Restore</h2>
+
+    <div class="tabs" role="tablist">
+      <button class="tab on" type="button" role="tab" data-tab="export" aria-selected="true">Export</button>
+      <button class="tab" type="button" role="tab" data-tab="import" aria-selected="false">Import</button>
+      <button class="tab" type="button" role="tab" data-tab="html" aria-selected="false">Telegram HTML</button>
+    </div>
+
+    <!-- EXPORT -->
+    <div class="tabpane" data-pane="export">
+      <p class="muted small">Save a copy of your library. Pick a format:</p>
+      <div class="radio-row">
+        <label><input type="radio" name="expFmt" value="full" checked> Full JSON <span class="muted small">(includes thumbnails)</span></label>
+        <label><input type="radio" name="expFmt" value="lean"> Compact JSON <span class="muted small">(no thumbnails)</span></label>
+        <label><input type="radio" name="expFmt" value="list"> Plain list <span class="muted small">(url + title)</span></label>
+      </div>
+      <textarea id="exportText" spellcheck="false" readonly aria-label="Exported data"></textarea>
+      <p class="muted small" id="exportStats"></p>
+      <div class="row">
+        <button id="copyExportBtn" class="btn ghost" type="button">Copy</button>
+        <button id="downloadExportBtn" class="btn primary" type="button">Download .json</button>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div class="tabpane" data-pane="import" hidden>
+      <p class="muted small">
+        Paste a backup JSON (from <em>Export</em>) or a plain list like:
+      </p>
+      <pre class="muted small fmt-hint">https://t.me/c/1234567890/42
 Family picnic highlights
 
 https://t.me/c/1234567890/57
 Birthday party compilation</pre>
-    <p class="muted small" style="margin-top:.35rem">
-      Or paste the entire contents of a Telegram Desktop export (<code>messages.html</code>). The app will extract video titles automatically. (You need at least one existing video from that channel so the channel ID is known.)
-    </p>
-    <textarea id="backupText" spellcheck="false" aria-label="Backup or bulk import data" placeholder="Paste backup JSON or bulk video list here..."></textarea>
-    <p id="backupMsg" class="msg" role="status"></p>
-    <div class="row">
-      <button id="copyBtn" class="btn ghost" type="button">Copy</button>
-      <button id="importBtn" class="btn primary" type="button">Import</button>
+      <textarea id="importText" spellcheck="false" aria-label="Import data" placeholder="Paste backup JSON or a url + title list…"></textarea>
+      <p class="muted small" id="importPreview"></p>
+      <div class="row">
+        <button id="previewImportBtn" class="btn ghost" type="button">Preview</button>
+        <button id="runImportBtn" class="btn primary" type="button" disabled>Import</button>
+      </div>
     </div>
+
+    <!-- TELEGRAM HTML -->
+    <div class="tabpane" data-pane="html" hidden>
+      <p class="muted small">
+        Paste the contents of a Telegram Desktop export (<code>messages.html</code>).
+        Captions become titles; auto-tags are generated from each caption.
+      </p>
+      <div>
+        <label for="htmlChannel">Channel ID</label>
+        <input type="text" id="htmlChannel" inputmode="numeric" placeholder="e.g. 1234567890" autocomplete="off">
+        <p class="muted small" id="htmlChannelHint"></p>
+      </div>
+      <textarea id="htmlText" spellcheck="false" aria-label="Telegram HTML export" placeholder="Paste messages.html contents here…"></textarea>
+      <p class="muted small" id="htmlPreview"></p>
+      <div class="row">
+        <button id="previewHtmlBtn" class="btn ghost" type="button">Preview</button>
+        <button id="runHtmlBtn" class="btn primary" type="button" disabled>Import</button>
+      </div>
+    </div>
+
+    <p id="backupMsg" class="msg" role="status"></p>
+    <div class="progress" id="backupProgress" hidden><div class="progress-bar" id="backupProgressBar"></div></div>
     <button id="backupClose" class="btn ghost" type="button">Close</button>
   </div>
 </div>
@@ -368,9 +427,6 @@ Birthday party compilation</pre>
 
 <script>
 (() => {
-  // Netflix-style thumbnails: each entry may contain a compressed contact-sheet image
-  // as `thumbnail`. The image is kept in the local mirror and JSON backups.
-
   'use strict';
 
   // ---------- Telegram helpers ----------
@@ -378,11 +434,11 @@ Birthday party compilation</pre>
   const has = v => { try { return !!tg && tg.isVersionAtLeast(v); } catch { return false; } };
   const $ = id => document.getElementById(id);
 
-  const LS_KEY = 'family_videos';   // local mirror + legacy data
-  const LS_PREFS = 'family_videos_prefs'; // filter/sort UI preferences
-  const LS_DIRTY = 'vv_dirty';      // set when changes were saved locally while cloud was unreachable
-  const CS_PREFIX = 'v_';           // one CloudStorage key per video
-  const CS_MAX = 1000;              // CloudStorage allows 1024 keys
+  const LS_KEY = 'family_videos';
+  const LS_PREFS = 'family_videos_prefs';
+  const LS_DIRTY = 'vv_dirty';
+  const CS_PREFIX = 'v_';
+  const CS_MAX = 1000;
   const TITLE_MAX = 120, TAGS_MAX = 15, TAG_MAX = 30;
 
   const cloudApi = has('6.9') && tg.CloudStorage ? tg.CloudStorage : null;
@@ -437,6 +493,19 @@ Birthday party compilation</pre>
     return out;
   }
 
+  // Auto-generate tags from a title (used for imports / Telegram HTML)
+  function autoTags(title) {
+    const stop = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
+    const words = String(title || '').toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)
+      .filter(w => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w));
+    const seen = new Set(); const tags = [];
+    for (const w of words) { if (seen.has(w)) continue; seen.add(w); tags.push('#' + w); if (tags.length >= 6) break; }
+    if (!tags.length) tags.push('#video');
+    return tags;
+  }
+
+  // FIXED: accept both data URLs and external http(s) URLs
   function normalizeEntry(o) {
     if (!o || typeof o !== 'object') return null;
     const url = normalizeTgUrl(o.url);
@@ -444,7 +513,9 @@ Birthday party compilation</pre>
     if (!url || !title) return null;
     const id = String(o.id == null ? '' : o.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || newId();
     const tags = parseTags(Array.isArray(o.tags) ? o.tags.join(' ') : '');
-    const thumbnail = typeof o.thumbnail === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(o.thumbnail)
+    const thumbnail = typeof o.thumbnail === 'string' &&
+      (/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(o.thumbnail) ||
+       /^https?:\/\//i.test(o.thumbnail))
       ? o.thumbnail.slice(0, 220000) : '';
     const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : today();
     const created = Number.isFinite(o.created) ? o.created : (Date.parse(date) || Date.now());
@@ -518,7 +589,6 @@ Birthday party compilation</pre>
     if (items === null) {
       items = readMirror();
     } else {
-      // Push local-only data to the cloud: first run (migration) or changes made while offline.
       let dirty = false;
       try { dirty = localStorage.getItem(LS_DIRTY) === '1'; } catch {}
       if (items.length === 0 || dirty) {
@@ -553,7 +623,7 @@ Birthday party compilation</pre>
     state.videos = next;
   }
 
-  // ---------- Rendering (DOM APIs only, so user text is never parsed as HTML) ----------
+  // ---------- Rendering ----------
   function el(tag, attrs = {}, kids = []) {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -610,7 +680,7 @@ Birthday party compilation</pre>
           class: 'tag' + (state.tags.includes(t) ? ' on' : ''), type: 'button', 'data-tag': t,
           'aria-pressed': String(state.tags.includes(t)), text: t
         }))),
-        el('a', { class: 'play', href: v.url, 'data-action': 'open', 'data-id': v.id, text: '▶ Play in Telegram' })
+        el('a', { class: 'play', href: v.url, rel: 'noopener noreferrer', 'data-action': 'open', 'data-id': v.id, text: '▶ Play in Telegram' })
       ])
     ]);
   }
@@ -618,7 +688,13 @@ Birthday party compilation</pre>
   function render() {
     const total = state.videos.length;
     const allTags = [...new Set(state.videos.flatMap(v => v.tags))].sort((a, b) => a.localeCompare(b));
-    state.tags = state.tags.filter(t => allTags.includes(t));
+
+    // FIXED: only prune saved filters once the catalog has loaded,
+    // otherwise allTags is empty on the first render and prefs get wiped.
+    if (!state.loading) {
+      state.tags = state.tags.filter(t => allTags.includes(t));
+    }
+
     const list = state.loading ? [] : visible();
 
     $('counter').textContent = state.loading ? 'Loading catalog...'
@@ -677,24 +753,10 @@ Birthday party compilation</pre>
     try { if (has('6.1')) tg.BackButton.hide(); } catch {}
   }
 
-  function openForm(v) {
-    editingId = v ? v.id : null;
-    $('formTitle').textContent = v ? 'Edit video' : 'Add video link';
-    $('saveBtn').textContent = v ? 'Save changes' : 'Add video';
-    $('newTitle').value = v ? v.title : '';
-    $('newUrl').value = v ? v.url : '';
-    $('newTags').value = v ? v.tags.join(' ') : '';
-    $('thumbnailInput').value = '';
-    setThumbnailPreview(v && v.thumbnail ? v.thumbnail : '');
-    $('formError').textContent = '';
-    showModal('formModal');
-    $('newTitle').focus();
-  }
-
   let pendingThumbnail = '';
 
-  function setThumbnailPreview(dataUrl) {
-    pendingThumbnail = dataUrl || '';
+  function setThumbnailPreview(src) {
+    pendingThumbnail = src || '';
     const wrap = $('thumbnailPreview');
     const img = $('thumbnailPreviewImg');
     if (pendingThumbnail) {
@@ -704,6 +766,39 @@ Birthday party compilation</pre>
       img.removeAttribute('src');
       wrap.classList.remove('show');
     }
+  }
+
+  function openForm(v) {
+    editingId = v ? v.id : null;
+    $('formTitle').textContent = v ? 'Edit video' : 'Add video link';
+    $('saveBtn').textContent = v ? 'Save changes' : 'Add video';
+    $('newTitle').value = v ? v.title : '';
+    $('newUrl').value = v ? v.url : '';
+    $('newTags').value = v ? v.tags.join(' ') : '';
+    $('thumbnailInput').value = '';
+    const thumb = v && v.thumbnail ? v.thumbnail : '';
+    if (thumb && /^https?:\/\//i.test(thumb)) {
+      $('thumbnailUrl').value = thumb;
+    } else {
+      $('thumbnailUrl').value = '';
+    }
+    setThumbnailPreview(thumb);
+    $('formError').textContent = '';
+    showModal('formModal');
+    $('newTitle').focus();
+  }
+
+  // FIXED: entering a URL clears the uploaded data and vice versa,
+  // and clearing the URL also clears the preview if there was no upload.
+  function applyThumbnailUrl() {
+    const raw = ($('thumbnailUrl').value || '').trim();
+    if (!raw) return;
+    try {
+      const u = new URL(raw);
+      if (!/^https?:$/i.test(u.protocol)) return;
+      setThumbnailPreview(u.href);
+      $('thumbnailInput').value = '';
+    } catch {}
   }
 
   function compressThumbnail(file) {
@@ -723,7 +818,6 @@ Birthday party compilation</pre>
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
           const out = canvas.toDataURL('image/jpeg', 0.72);
-          // Keep thumbnails reasonably small for local storage.
           if (out.length > 220000) {
             const smaller = document.createElement('canvas');
             const s = .72;
@@ -755,6 +849,17 @@ Birthday party compilation</pre>
 
     const old = editingId ? state.videos.find(v => v.id === editingId) : null;
     const tags = parseTags($('newTags').value);
+
+    let thumb = '';
+    const urlRaw = ($('thumbnailUrl').value || '').trim();
+    if (urlRaw) {
+      try {
+        const u = new URL(urlRaw);
+        if (/^https?:$/i.test(u.protocol)) thumb = u.href;
+      } catch {}
+    }
+    if (!thumb) thumb = pendingThumbnail || (old ? old.thumbnail || '' : '');
+
     const entry = {
       id: old ? old.id : newId(),
       title: title.slice(0, TITLE_MAX),
@@ -762,7 +867,7 @@ Birthday party compilation</pre>
       tags: tags.length ? tags : ['#family'],
       date: old ? old.date : today(),
       created: old ? old.created : Date.now(),
-      thumbnail: pendingThumbnail || (old ? old.thumbnail || '' : '')
+      thumbnail: thumb
     };
 
     saving = true;
@@ -792,77 +897,144 @@ Birthday party compilation</pre>
     catch { await alertMsg('Could not remove the video. Try again.'); }
   }
 
-  // ---------- Backup ----------
-  const backupMsg = (text, isErr) => { const m = $('backupMsg'); m.textContent = text; m.className = 'msg' + (isErr ? ' err' : ''); };
+  // ---------- Backup / Restore ----------
+  let pendingImport = null;
+  let pendingHtml = null;
 
-  function openBackup() {
-    $('backupText').value = JSON.stringify({ app: 'family-video-vault', version: 1, videos: state.videos }, null, 2);
+  const backupMsg = (text, kind) => {
+    const m = $('backupMsg');
+    m.textContent = text || '';
+    m.className = 'msg' + (kind === 'err' ? ' err' : kind === 'ok' ? ' ok' : '');
+  };
+  const setProgress = (pct) => {
+    const wrap = $('backupProgress');
+    if (pct == null) { wrap.hidden = true; $('backupProgressBar').style.width = '0'; return; }
+    wrap.hidden = false;
+    $('backupProgressBar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  };
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => {
+      const on = t.dataset.tab === name;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-selected', String(on));
+    });
+    document.querySelectorAll('.tabpane').forEach(p => {
+      p.hidden = p.dataset.pane !== name;
+    });
     backupMsg('');
-    showModal('backupModal');
+    setProgress(null);
+    if (name === 'export') refreshExport();
+    if (name === 'html') refreshHtmlChannelHint();
   }
-  async function copyBackup() {
-    const ta = $('backupText');
-    try { await navigator.clipboard.writeText(ta.value); backupMsg('Copied to clipboard.'); return; } catch {}
+
+  // ---- Export ----
+  function buildExport(format) {
+    if (format === 'list') {
+      return state.videos.map(v => `${v.url}\n${v.title}`).join('\n\n');
+    }
+    const stripThumbs = format === 'lean';
+    const videos = stripThumbs
+      ? state.videos.map(({ thumbnail, ...rest }) => rest)
+      : state.videos;
+    return JSON.stringify({ app: 'family-video-vault', version: 1, videos }, null, 2);
+  }
+
+  function refreshExport() {
+    const fmt = document.querySelector('input[name="expFmt"]:checked').value;
+    const text = buildExport(fmt);
+    $('exportText').value = text;
+    const withThumbs = state.videos.filter(v => v.thumbnail).length;
+    $('exportStats').textContent =
+      `${state.videos.length} videos · ${withThumbs} with previews · ${(text.length / 1024).toFixed(1)} KB`;
+    $('downloadExportBtn').textContent = fmt === 'list' ? 'Download .txt' : 'Download .json';
+  }
+
+  async function copyExport() {
+    const ta = $('exportText');
+    try { await navigator.clipboard.writeText(ta.value); backupMsg('Copied to clipboard.', 'ok'); return; }
+    catch {}
     ta.focus(); ta.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch {}
-    backupMsg(ok ? 'Copied to clipboard.' : 'Select all the text and copy it manually.', !ok);
-  }
-  // Generate tags from significant words in the title (fully generic)
-  function autoTags(title) {
-    const stop = new Set(['the','a','an','and','or','of','to','in','on','for','with','your','you','my','is','it','at','by','from','this','that','into','over','under','out','up','as','be','are','was','were','has','have','had','not','no','but','so','if','than','then','too','very','just','only','also','can','will','do','did','does','about','after','before','between','through','during','without','within','along','across','behind','beyond','plus','vs','part','parts','episode','ep','video','full','hd','720p','1080p','4k']);
-    const words = String(title || '')
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 3 && !stop.has(w) && !/^\d+$/.test(w));
-    const seen = new Set();
-    const tags = [];
-    for (const w of words) {
-      if (seen.has(w)) continue;
-      seen.add(w);
-      tags.push('#' + w);
-      if (tags.length >= 6) break;
-    }
-    if (!tags.length) tags.push('#video');
-    return tags;
+    backupMsg(ok ? 'Copied to clipboard.' : 'Select all and copy manually.', ok ? 'ok' : 'err');
   }
 
-  // Parse bulk plain-text format:
-  // https://t.me/c/.../123
-  // Video Title Here
-  function parseBulkText(text) {
+  function downloadExport() {
+    const fmt = document.querySelector('input[name="expFmt"]:checked').value;
+    const text = $('exportText').value;
+    const blob = new Blob([text], { type: fmt === 'list' ? 'text/plain' : 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `family-video-vault-${today()}.${fmt === 'list' ? 'txt' : 'json'}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupMsg('Download started.', 'ok');
+  }
+
+  // ---- Import (JSON or bulk list) ----
+  function parseImportInput(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return { error: 'Nothing to import.' };
+
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    if (json) {
+      const arr = Array.isArray(json) ? json : (json && Array.isArray(json.videos) ? json.videos : null);
+      if (!arr) return { error: 'JSON did not contain a "videos" array.' };
+      return { items: arr, source: 'json' };
+    }
+
     const lines = text.split(/\r?\n/).map(l => l.trim());
     const items = [];
     let i = 0;
     while (i < lines.length) {
-      const line = lines[i];
-      if (!line) { i++; continue; }
-      const url = normalizeTgUrl(line);
-      if (url) {
-        let title = '';
-        let j = i + 1;
-        while (j < lines.length && !lines[j]) j++;
-        if (j < lines.length && !normalizeTgUrl(lines[j])) {
-          title = lines[j].slice(0, TITLE_MAX);
-          i = j + 1;
-        } else {
-          i++;
-        }
-        if (title) items.push({ url, title, tags: autoTags(title) });
-        else i++;
+      if (!lines[i]) { i++; continue; }
+      const url = normalizeTgUrl(lines[i]);
+      if (!url) { i++; continue; }
+      let title = '';
+      let j = i + 1;
+      while (j < lines.length && !lines[j]) j++;
+      if (j < lines.length && !normalizeTgUrl(lines[j])) {
+        title = lines[j].slice(0, TITLE_MAX);
+        i = j + 1;
       } else {
         i++;
       }
+      if (title) items.push({ url, title });
     }
-    return items;
+    if (!items.length) return { error: 'No url + title pairs found.' };
+    return { items, source: 'list' };
   }
 
-  // Detect and parse a Telegram Desktop HTML export (messages.html)
-  function isTelegramExport(text) {
-    return /class="message[^"]*"/i.test(text) && /id="message\d+"/i.test(text) && /Exported Data|page_wrap|chat_page/i.test(text);
+  function previewImport() {
+    const result = parseImportInput($('importText').value);
+    if (result.error) {
+      backupMsg(result.error, 'err');
+      $('importPreview').textContent = '';
+      $('runImportBtn').disabled = true;
+      pendingImport = null;
+      return;
+    }
+
+    const seen = new Set(state.videos.map(v => urlKey(v.url)));
+    const fresh = result.items.map(raw => {
+      const e = normalizeEntry(raw.url && raw.title
+        ? { ...raw, tags: raw.tags && raw.tags.length ? raw.tags : autoTags(raw.title) }
+        : raw);
+      return e;
+    }).filter(e => e && !seen.has(urlKey(e.url)));
+
+    const dupes = result.items.length - fresh.length;
+    pendingImport = { items: fresh, source: result.source };
+    $('importPreview').textContent =
+      `${fresh.length} new · ${dupes} duplicate${dupes === 1 ? '' : 's'} · source: ${result.source}`;
+    $('runImportBtn').disabled = fresh.length === 0;
+    backupMsg('');
   }
 
+  // ---- Telegram HTML (DOMParser) ----
   function getChannelIdFromLibrary() {
     for (const v of state.videos) {
       const m = String(v.url || '').match(/t\.me\/c\/(\d+)\//i);
@@ -871,168 +1043,170 @@ Birthday party compilation</pre>
     return null;
   }
 
-  function parseTelegramHtml(text) {
-    const channelId = getChannelIdFromLibrary();
-    if (!channelId) {
-      return { error: 'Add at least one video from this channel first (so the app knows the channel ID), then try importing the HTML again.' };
-    }
+  function refreshHtmlChannelHint() {
+    const lib = getChannelIdFromLibrary();
+    const input = $('htmlChannel');
+    if (lib && !input.value) input.value = lib;
+    $('htmlChannelHint').textContent = lib
+      ? `Detected from your library: ${lib}`
+      : 'No channel ID found in your library. Enter the numeric channel ID (the digits in t.me/c/<ID>/…).';
+  }
 
-    // Extract message blocks that contain a video and a text caption
-    // Pattern: id="message123" ... media_video ... <div class="text">Caption</div>
+  function parseTelegramHtml(raw, channelId) {
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const messages = doc.querySelectorAll('.message[id^="message"]');
+    if (!messages.length) return { error: 'No Telegram message blocks found. Is this messages.html?' };
+
     const items = [];
-    const msgRe = /id="message(\d+)"[\s\S]*?(?=id="message\d+"|<\/div>\s*<\/div>\s*<\/div>\s*<\/body>|$)/gi;
-    let match;
     const seenTitles = new Set();
 
-    // Simpler approach: find all message IDs that have both media_video and a nearby text div
-    const videoMsgRe = /id="message(\d+)"[\s\S]{0,2500}?media_video[\s\S]{0,1500}?<div class="text">\s*([^<]+?)\s*<\/div>/gi;
+    for (const msg of messages) {
+      const idMatch = (msg.id || '').match(/^message(\d+)$/);
+      if (!idMatch) continue;
+      const msgId = idMatch[1];
 
-    while ((match = videoMsgRe.exec(text)) !== null) {
-      const msgId = match[1];
-      let title = match[2].replace(/\s+/g, ' ').trim();
-      // Decode common HTML entities
-      title = title
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&apos;/g, "'")
-        .replace(/&nbsp;/g, ' ')
-        .trim()
-        .slice(0, TITLE_MAX);
+      const hasVideo = msg.querySelector('.media_video, .media_video_wrap, video, .video_file') ||
+                       /media_video/.test(msg.className);
+      if (!hasVideo) continue;
 
-      if (!title || title.length < 2) continue;
-      // Skip pure service-looking short texts
-      if (/^channel\b/i.test(title)) continue;
+      const textEl = msg.querySelector('.text');
+      if (!textEl) continue;
+      let title = textEl.textContent.replace(/\s+/g, ' ').trim();
+      if (title.length < 2) continue;
+      title = title.slice(0, TITLE_MAX);
 
       const key = title.toLowerCase();
       if (seenTitles.has(key)) continue;
       seenTitles.add(key);
 
-      const url = `https://t.me/c/${channelId}/${msgId}`;
-      items.push({ url, title, tags: autoTags(title) });
+      items.push({ url: `https://t.me/c/${channelId}/${msgId}`, title });
     }
 
+    if (!items.length) return { error: 'No video messages with captions found.' };
     return { items };
   }
 
-  async function importBackup() {
-    const rawText = $('backupText').value.trim();
-    if (!rawText) return backupMsg('Paste a backup JSON, bulk list, or Telegram HTML export first.', true);
+  function previewHtml() {
+    const raw = $('htmlText').value;
+    if (!raw.trim()) { backupMsg('Paste the messages.html contents first.', 'err'); return; }
+    const channelId = ($('htmlChannel').value || '').replace(/\D/g, '');
+    if (!channelId) { backupMsg('Enter the numeric channel ID.', 'err'); return; }
 
-    let list = null;
-    let source = '';
-
-    // 1) Try JSON backup
-    try {
-      const data = JSON.parse(rawText);
-      list = Array.isArray(data) ? data : (data && Array.isArray(data.videos) ? data.videos : null);
-      if (list) source = 'json';
-    } catch {}
-
-    // 2) Try Telegram HTML export
-    if (!list && isTelegramExport(rawText)) {
-      const result = parseTelegramHtml(rawText);
-      if (result.error) return backupMsg(result.error, true);
-      list = result.items;
-      source = 'telegram-html';
-      if (!list.length) return backupMsg('No video captions found in this Telegram export.', true);
+    const result = parseTelegramHtml(raw, channelId);
+    if (result.error) {
+      backupMsg(result.error, 'err');
+      $('htmlPreview').textContent = '';
+      $('runHtmlBtn').disabled = true;
+      pendingHtml = null;
+      return;
     }
 
-    // 3) Fallback to bulk plain-text
-    if (!list) {
-      list = parseBulkText(rawText);
-      source = 'bulk-text';
-      if (!list.length) {
-        return backupMsg('Could not find any videos. Paste a backup JSON, a link+title list, or a Telegram messages.html export.', true);
-      }
-    }
-
-    // Normalize + filter duplicates up front
     const seen = new Set(state.videos.map(v => urlKey(v.url)));
-    const ids = new Set(state.videos.map(v => v.id));
-    const toAdd = [];
+    const fresh = result.items.map(raw => normalizeEntry({
+      ...raw, tags: autoTags(raw.title)
+    })).filter(e => e && !seen.has(urlKey(e.url)));
 
-    for (const raw of list) {
-      let e;
-      if (raw && raw.url && raw.title) {
-        e = normalizeEntry({
-          id: raw.id,
-          title: raw.title,
-          url: raw.url,
-          tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : autoTags(raw.title),
-          date: raw.date,
-          created: raw.created,
-          thumbnail: raw.thumbnail
-        });
-      } else {
-        e = normalizeEntry(raw);
-      }
-      if (!e) continue;
-      if (seen.has(urlKey(e.url))) continue;
-      if (ids.has(e.id)) e.id = newId();
-      seen.add(urlKey(e.url));
-      ids.add(e.id);
-      toAdd.push(e);
+    const dupes = result.items.length - fresh.length;
+    pendingHtml = { items: fresh, source: 'telegram-html' };
+    $('htmlPreview').textContent =
+      `${fresh.length} new · ${dupes} duplicate${dupes === 1 ? '' : 's'} · ${result.items.length} found`;
+    $('runHtmlBtn').disabled = fresh.length === 0;
+    backupMsg('');
+  }
+
+  // ---- Shared commit path ----
+  async function commitImport(items, source) {
+    if (!items || !items.length) return;
+
+    // FIXED: respect CS_MAX before writing anything
+    const room = Math.max(0, CS_MAX - state.videos.length);
+    let trimmed = 0;
+    if (items.length > room) { trimmed = items.length - room; items = items.slice(0, room); }
+    if (!items.length) {
+      backupMsg(`Catalog is full (${CS_MAX}). Nothing imported.`, 'err');
+      return;
     }
 
-    if (!toAdd.length) {
-      return backupMsg(`No new videos to add (${list.length} already in library or invalid).`, true);
-    }
-
-    // --- Fast path: write everything to local mirror first ---
-    const next = [...toAdd, ...state.videos];
+    const next = [...items, ...state.videos];
     state.videos = next;
     mirror(next);
     try { localStorage.setItem(LS_DIRTY, '1'); } catch {}
     render();
 
-    backupMsg(`Saved ${toAdd.length} videos locally. Syncing to cloud…`);
+    backupMsg(`Saved ${items.length} locally. Syncing to cloud…`);
+    setProgress(0);
 
-    // --- Slow path: sync to Telegram CloudStorage in small batches ---
     if (cloud) {
       const BATCH = 20;
-      const DELAY = 400; // ms between batches to avoid rate limits
-      let synced = 0;
+      const DELAY = 350;
       let failed = 0;
-
-      for (let i = 0; i < toAdd.length; i += BATCH) {
-        const batch = toAdd.slice(i, i + BATCH);
+      for (let i = 0; i < items.length; i += BATCH) {
+        const batch = items.slice(i, i + BATCH);
         for (const entry of batch) {
-          try {
-            await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry));
-            synced++;
-          } catch {
-            failed++;
-          }
+          try { await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry)); }
+          catch { failed++; }
         }
-        backupMsg(`Syncing… ${Math.min(i + BATCH, toAdd.length)} / ${toAdd.length}`);
-        if (i + BATCH < toAdd.length) {
-          await new Promise(r => setTimeout(r, DELAY));
-        }
+        setProgress(Math.round(((i + batch.length) / items.length) * 100));
+        if (i + BATCH < items.length) await new Promise(r => setTimeout(r, DELAY));
       }
-
-      if (failed === 0) {
-        try { localStorage.removeItem(LS_DIRTY); } catch {}
-        state.mode = 'cloud';
-      }
-
+      if (failed === 0) { try { localStorage.removeItem(LS_DIRTY); } catch {} state.mode = 'cloud'; }
+      setProgress(null);
       const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+      const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
       backupMsg(
-        `Done${srcNote}. Added ${toAdd.length} videos` +
-        (failed ? ` (${failed} could not sync to cloud, kept locally).` : '.'),
-        failed > 0
+        `Done${srcNote}. Added ${items.length}` +
+        (failed ? ` · ${failed} kept locally only.` : '.') + trimNote,
+        (failed || trimmed) ? 'err' : 'ok'
       );
     } else {
+      setProgress(null);
       const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
-      backupMsg(`Done${srcNote}. Added ${toAdd.length} videos (saved on this device).`);
+      const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
+      backupMsg(`Done${srcNote}. Added ${items.length} (saved on this device).${trimNote}`, trimmed ? 'err' : 'ok');
     }
-
     render();
-    if (toAdd.length) haptic('success');
+    haptic('success');
+
+    // FIXED: clear stale state in the other tab
+    pendingImport = null; pendingHtml = null;
+    $('importPreview').textContent = '';
+    $('htmlPreview').textContent = '';
+    $('runImportBtn').disabled = true;
+    $('runHtmlBtn').disabled = true;
   }
 
+  function runImport() {
+    if (!pendingImport || !pendingImport.items.length) return;
+    $('runImportBtn').disabled = true;
+    $('previewImportBtn').disabled = true;
+    commitImport(pendingImport.items, pendingImport.source).finally(() => {
+      $('previewImportBtn').disabled = false;
+    });
+  }
+
+  function runHtmlImport() {
+    if (!pendingHtml || !pendingHtml.items.length) return;
+    $('runHtmlBtn').disabled = true;
+    $('previewHtmlBtn').disabled = true;
+    commitImport(pendingHtml.items, pendingHtml.source).finally(() => {
+      $('previewHtmlBtn').disabled = false;
+    });
+  }
+
+  function openBackup() {
+    pendingImport = null;
+    pendingHtml = null;
+    $('importText').value = '';
+    $('importPreview').textContent = '';
+    $('htmlText').value = '';
+    $('htmlPreview').textContent = '';
+    $('runImportBtn').disabled = true;
+    $('runHtmlBtn').disabled = true;
+    backupMsg('');
+    setProgress(null);
+    showModal('backupModal');
+    switchTab('export');
+  }
 
   // ---------- Events ----------
   document.addEventListener('click', e => {
@@ -1103,17 +1277,33 @@ Birthday party compilation</pre>
       $('formError').textContent = '';
       const data = await compressThumbnail(file);
       setThumbnailPreview(data);
+      $('thumbnailUrl').value = '';
     } catch (err) {
       $('formError').textContent = err.message || 'Could not process the image.';
       $('thumbnailInput').value = '';
     }
   });
+  $('thumbnailUrl').addEventListener('input', applyThumbnailUrl);
+  $('thumbnailUrl').addEventListener('change', applyThumbnailUrl);
   $('removeThumbnailBtn').addEventListener('click', () => {
     setThumbnailPreview('');
     $('thumbnailInput').value = '';
+    $('thumbnailUrl').value = '';
   });
-  $('copyBtn').addEventListener('click', copyBackup);
-  $('importBtn').addEventListener('click', importBackup);
+
+  // Backup sheet wiring
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+  document.querySelectorAll('input[name="expFmt"]').forEach(r => {
+    r.addEventListener('change', refreshExport);
+  });
+  $('copyExportBtn').addEventListener('click', copyExport);
+  $('downloadExportBtn').addEventListener('click', downloadExport);
+  $('previewImportBtn').addEventListener('click', previewImport);
+  $('runImportBtn').addEventListener('click', runImport);
+  $('previewHtmlBtn').addEventListener('click', previewHtml);
+  $('runHtmlBtn').addEventListener('click', runHtmlImport);
   $('backupClose').addEventListener('click', closeModal);
 
   for (const id of ['formModal', 'backupModal']) {
@@ -1131,7 +1321,6 @@ Birthday party compilation</pre>
   });
   $('sortSel').addEventListener('change', e => { state.sort = e.target.value; savePrefs(); render(); });
 
-  // Pick up changes made on another device when the app comes back to the foreground.
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && !state.loading && !activeModal && !saving) {
       const y = window.scrollY;
