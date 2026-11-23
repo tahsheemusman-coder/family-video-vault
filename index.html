@@ -123,7 +123,7 @@
       </div>
     </div>
 
-    <!-- IMPORT -->
+        <!-- IMPORT -->
     <div class="tabpane" data-pane="import" hidden>
       <p class="muted small">
         Paste a backup JSON (from <em>Export</em>) or a plain list like:
@@ -133,6 +133,12 @@ Family picnic highlights
 
 https://t.me/c/1234567890/57
 Birthday party compilation</pre>
+      
+      <label style="display:flex; align-items:center; gap:.5rem; margin-top:.5rem; cursor:pointer;">
+        <input type="checkbox" id="overwriteToggle">
+        <span class="muted small" style="margin:0;">Overwrite entire library with this file</span>
+      </label>
+      
       <textarea id="importText" spellcheck="false" aria-label="Import data" placeholder="Paste backup JSON or a url + title list…"></textarea>
       <p class="muted small" id="importPreview"></p>
       <div class="row">
@@ -634,7 +640,7 @@ Birthday party compilation</pre>
     catch { await alertMsg('Could not remove the video. Try again.'); }
   }
 
-  // ---------- Backup / Restore ----------
+   // ---------- Backup / Restore ----------
   let pendingImport = null;
   let pendingHtml = null;
 
@@ -755,19 +761,27 @@ Birthday party compilation</pre>
       return;
     }
 
+    const overwrite = $('overwriteToggle').checked;
     const seen = new Set(state.videos.map(v => urlKey(v.url)));
+    
     const fresh = result.items.map(raw => {
       const e = normalizeEntry(raw.url && raw.title
         ? { ...raw, tags: raw.tags && raw.tags.length ? raw.tags : autoTags(raw.title) }
         : raw);
       return e;
-    }).filter(e => e && !seen.has(urlKey(e.url)));
+    }).filter(e => e && (overwrite || !seen.has(urlKey(e.url))));
 
     const dupes = result.items.length - fresh.length;
-    pendingImport = { items: fresh, source: result.source };
-    $('importPreview').textContent =
-      `${fresh.length} new · ${dupes} duplicate${dupes === 1 ? '' : 's'} · source: ${result.source}`;
-    $('runImportBtn').disabled = fresh.length === 0;
+    pendingImport = { items: fresh, source: result.source, overwrite };
+    
+    if (overwrite) {
+      $('importPreview').textContent = `${fresh.length} videos to restore (will replace current library)`;
+      $('runImportBtn').disabled = false;
+    } else {
+      $('importPreview').textContent =
+        `${fresh.length} new · ${dupes} duplicate${dupes === 1 ? '' : 's'} · source: ${result.source}`;
+      $('runImportBtn').disabled = fresh.length === 0;
+    }
     backupMsg('');
   }
 
@@ -852,54 +866,89 @@ Birthday party compilation</pre>
   }
 
   // ---- Shared commit path ----
-  async function commitImport(items, source) {
+  async function commitImport(items, source, overwrite = false) {
     if (!items || !items.length) return;
 
-    const room = Math.max(0, CS_MAX - state.videos.length);
-    let trimmed = 0;
-    if (items.length > room) { trimmed = items.length - room; items = items.slice(0, room); }
-    if (!items.length) {
-      backupMsg(`Catalog is full (${CS_MAX}). Nothing imported.`, 'err');
-      return;
-    }
-
-    const next = [...items, ...state.videos];
-    state.videos = next;
-    mirror(next);
-    try { localStorage.setItem(LS_DIRTY, '1'); } catch {}
-    render();
-
-    backupMsg(`Saved ${items.length} locally. Syncing to cloud…`);
+    backupMsg(overwrite ? 'Overwriting library…' : `Saved ${items.length} locally. Syncing to cloud…`);
     setProgress(0);
 
-    if (cloud) {
-      const BATCH = 20;
-      const DELAY = 350;
-      let failed = 0;
-      for (let i = 0; i < items.length; i += BATCH) {
-        const batch = items.slice(i, i + BATCH);
-        for (const entry of batch) {
-          try { await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry)); }
-          catch { failed++; }
+    if (overwrite) {
+      // 1. Delete everything currently in the catalog
+      const oldIds = state.videos.map(v => v.id);
+      if (cloud) {
+        for (const id of oldIds) {
+          try { await cs('removeItem', CS_PREFIX + id); } catch {}
         }
-        setProgress(Math.round(((i + batch.length) / items.length) * 100));
-        if (i + BATCH < items.length) await new Promise(r => setTimeout(r, DELAY));
       }
-      if (failed === 0) { try { localStorage.removeItem(LS_DIRTY); } catch {} state.mode = 'cloud'; }
-      setProgress(null);
-      const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
-      const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
-      backupMsg(
-        `Done${srcNote}. Added ${items.length}` +
-        (failed ? ` · ${failed} kept locally only.` : '.') + trimNote,
-        (failed || trimmed) ? 'err' : 'ok'
-      );
+      // 2. Set the new items
+      state.videos = items;
+      mirror(items);
+      // 3. Push new items to cloud
+      if (cloud) {
+        const BATCH = 20;
+        const DELAY = 350;
+        let failed = 0;
+        for (let i = 0; i < items.length; i += BATCH) {
+          const batch = items.slice(i, i + BATCH);
+          for (const entry of batch) {
+            try { await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry)); }
+            catch { failed++; }
+          }
+          setProgress(Math.round(((i + batch.length) / items.length) * 100));
+          if (i + BATCH < items.length) await new Promise(r => setTimeout(r, DELAY));
+        }
+        if (failed === 0) { try { localStorage.removeItem(LS_DIRTY); } catch {} state.mode = 'cloud'; }
+        setProgress(null);
+        backupMsg(`Done. Replaced library with ${items.length} videos.` + (failed ? ` (${failed} failed to sync)` : ''), failed ? 'err' : 'ok');
+      } else {
+        setProgress(null);
+        backupMsg(`Done. Replaced library with ${items.length} videos (saved on this device).`, 'ok');
+      }
     } else {
-      setProgress(null);
-      const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
-      const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
-      backupMsg(`Done${srcNote}. Added ${items.length} (saved on this device).${trimNote}`, trimmed ? 'err' : 'ok');
+      // Standard merge logic
+      const room = Math.max(0, CS_MAX - state.videos.length);
+      let trimmed = 0;
+      if (items.length > room) { trimmed = items.length - room; items = items.slice(0, room); }
+      if (!items.length) {
+        backupMsg(`Catalog is full (${CS_MAX}). Nothing imported.`, 'err');
+        return;
+      }
+
+      const next = [...items, ...state.videos];
+      state.videos = next;
+      mirror(next);
+      try { localStorage.setItem(LS_DIRTY, '1'); } catch {}
+      
+      if (cloud) {
+        const BATCH = 20;
+        const DELAY = 350;
+        let failed = 0;
+        for (let i = 0; i < items.length; i += BATCH) {
+          const batch = items.slice(i, i + BATCH);
+          for (const entry of batch) {
+            try { await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry)); }
+            catch { failed++; }
+          }
+          setProgress(Math.round(((i + batch.length) / items.length) * 100));
+          if (i + BATCH < items.length) await new Promise(r => setTimeout(r, DELAY));
+        }
+        if (failed === 0) { try { localStorage.removeItem(LS_DIRTY); } catch {} state.mode = 'cloud'; }
+        setProgress(null);
+        const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+        const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
+        backupMsg(
+          `Done${srcNote}. Added ${items.length}` +
+          (failed ? ` · ${failed} kept locally only.` : '.') + trimNote,
+          (failed || trimmed) ? 'err' : 'ok'
+        );
+      } else {
+        setProgress(null);
+        const srcNote = source === 'telegram-html' ? ' (from Telegram export)' : '';
+        const trimNote = trimmed ? ` · ${trimmed} skipped (catalog full)` : '';
+        backupMsg(`Done${srcNote}. Added ${items.length} (saved on this device).${trimNote}`, trimmed ? 'err' : 'ok');
+      }
     }
+
     render();
     haptic('success');
 
@@ -914,7 +963,7 @@ Birthday party compilation</pre>
     if (!pendingImport || !pendingImport.items.length) return;
     $('runImportBtn').disabled = true;
     $('previewImportBtn').disabled = true;
-    commitImport(pendingImport.items, pendingImport.source).finally(() => {
+    commitImport(pendingImport.items, pendingImport.source, pendingImport.overwrite).finally(() => {
       $('previewImportBtn').disabled = false;
     });
   }
@@ -923,7 +972,7 @@ Birthday party compilation</pre>
     if (!pendingHtml || !pendingHtml.items.length) return;
     $('runHtmlBtn').disabled = true;
     $('previewHtmlBtn').disabled = true;
-    commitImport(pendingHtml.items, pendingHtml.source).finally(() => {
+    commitImport(pendingHtml.items, pendingHtml.source, false).finally(() => {
       $('previewHtmlBtn').disabled = false;
     });
   }
@@ -937,6 +986,7 @@ Birthday party compilation</pre>
     $('htmlPreview').textContent = '';
     $('runImportBtn').disabled = true;
     $('runHtmlBtn').disabled = true;
+    $('overwriteToggle').checked = false;
     backupMsg('');
     setProgress(null);
     showModal('backupModal');
