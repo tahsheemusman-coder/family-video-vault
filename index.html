@@ -123,7 +123,7 @@
       </div>
     </div>
 
-        <!-- IMPORT -->
+           <!-- IMPORT -->
     <div class="tabpane" data-pane="import" hidden>
       <p class="muted small">
         Paste a backup JSON (from <em>Export</em>) or a plain list like:
@@ -133,12 +133,17 @@ Family picnic highlights
 
 https://t.me/c/1234567890/57
 Birthday party compilation</pre>
-      
+
+      <div class="upload-box" style="margin-top:.5rem; padding:.75rem;">
+        <label for="importFile" style="margin-bottom:.5rem; display:block;">Choose a backup file (.json or .txt)</label>
+        <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" style="font-size:12px; border:0; padding:0; background:transparent;">
+      </div>
+
       <label style="display:flex; align-items:center; gap:.5rem; margin-top:.5rem; cursor:pointer;">
         <input type="checkbox" id="overwriteToggle">
         <span class="muted small" style="margin:0;">Overwrite entire library with this file</span>
       </label>
-      
+
       <textarea id="importText" spellcheck="false" aria-label="Import data" placeholder="Paste backup JSON or a url + title list…"></textarea>
       <p class="muted small" id="importPreview"></p>
       <div class="row">
@@ -1113,6 +1118,17 @@ Birthday party compilation</pre>
       render();
       window.scrollTo(0, y);
     }
+  });
+
+    // File picker for import
+  $('importFile').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      $('importText').value = ev.target.result;
+    };
+    reader.readAsText(file);
   });
 
   // ---------- Start ----------
