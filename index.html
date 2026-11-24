@@ -123,7 +123,7 @@
       </div>
     </div>
 
-           <!-- IMPORT -->
+    <!-- IMPORT -->
     <div class="tabpane" data-pane="import" hidden>
       <p class="muted small">
         Paste a backup JSON (from <em>Export</em>) or a plain list like:
@@ -645,7 +645,7 @@ Birthday party compilation</pre>
     catch { await alertMsg('Could not remove the video. Try again.'); }
   }
 
-   // ---------- Backup / Restore ----------
+  // ---------- Backup / Restore ----------
   let pendingImport = null;
   let pendingHtml = null;
 
@@ -692,8 +692,6 @@ Birthday party compilation</pre>
     const fmt = document.querySelector('input[name="expFmt"]:checked').value;
     const withThumbs = state.videos.filter(v => v.thumbnail).length;
 
-    // Full JSON with embedded previews can be huge (tens of MB).
-    // Never dump it into the textarea — only generate for download.
     if (fmt === 'full' && withThumbs > 0) {
       const lean = buildExport('lean');
       const leanKb = (lean.length / 1024).toFixed(1);
@@ -736,7 +734,6 @@ Birthday party compilation</pre>
 
   function downloadExport() {
     const fmt = document.querySelector('input[name="expFmt"]:checked').value;
-    // Always rebuild so "full" includes thumbnails even when textarea only shows a notice
     const text = buildExport(fmt);
     const blob = new Blob([text], { type: fmt === 'list' ? 'text/plain' : 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -904,31 +901,38 @@ Birthday party compilation</pre>
     backupMsg(overwrite ? 'Overwriting library…' : `Saved ${items.length} locally. Syncing to cloud…`);
     setProgress(0);
 
+    const BATCH = 20;
+    const DELAY = 350;
+    let failed = 0;
+
     if (overwrite) {
       // 1. Delete everything currently in the catalog
       const oldIds = state.videos.map(v => v.id);
-      if (cloud) {
-        for (const id of oldIds) {
-          try { await cs('removeItem', CS_PREFIX + id); } catch {}
+      if (cloud && oldIds.length > 0) {
+        for (let i = 0; i < oldIds.length; i++) {
+          try { await cs('removeItem', CS_PREFIX + oldIds[i]); } catch {}
+          if (i % 10 === 0) setProgress(Math.round((i / oldIds.length) * 20)); // 0% to 20%
         }
       }
+      
       // 2. Set the new items
       state.videos = items;
       mirror(items);
+      
       // 3. Push new items to cloud
       if (cloud) {
-        const BATCH = 20;
-        const DELAY = 350;
-        let failed = 0;
         for (let i = 0; i < items.length; i += BATCH) {
           const batch = items.slice(i, i + BATCH);
           for (const entry of batch) {
             try { await cs('setItem', CS_PREFIX + entry.id, JSON.stringify(entry)); }
             catch { failed++; }
           }
-          setProgress(Math.round(((i + batch.length) / items.length) * 100));
+          // Progress goes from 20% to 100%
+          const pct = 20 + Math.round(((i + batch.length) / items.length) * 80);
+          setProgress(pct);
           if (i + BATCH < items.length) await new Promise(r => setTimeout(r, DELAY));
         }
+        
         if (failed === 0) { try { localStorage.removeItem(LS_DIRTY); } catch {} state.mode = 'cloud'; }
         setProgress(null);
         backupMsg(`Done. Replaced library with ${items.length} videos.` + (failed ? ` (${failed} failed to sync)` : ''), failed ? 'err' : 'ok');
@@ -952,9 +956,6 @@ Birthday party compilation</pre>
       try { localStorage.setItem(LS_DIRTY, '1'); } catch {}
       
       if (cloud) {
-        const BATCH = 20;
-        const DELAY = 350;
-        let failed = 0;
         for (let i = 0; i < items.length; i += BATCH) {
           const batch = items.slice(i, i + BATCH);
           for (const entry of batch) {
@@ -1023,7 +1024,6 @@ Birthday party compilation</pre>
       backupMsg('');
       setProgress(null);
       showModal('backupModal');
-      // Prefer compact view so opening Backup never freezes on large libraries
       const fullRadio = document.querySelector('input[name="expFmt"][value="full"]');
       const leanRadio = document.querySelector('input[name="expFmt"][value="lean"]');
       if (leanRadio && state.videos.some(v => v.thumbnail)) {
@@ -1160,7 +1160,7 @@ Birthday party compilation</pre>
     }
   });
 
-    // File picker for import
+  // File picker for import
   $('importFile').addEventListener('change', e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -1172,7 +1172,7 @@ Birthday party compilation</pre>
   });
 
   // ---------- Start ----------
-    // Allow mouse wheel to scroll the tags horizontally
+  // Allow mouse wheel to scroll the tags horizontally
   document.querySelector('.filters').addEventListener('wheel', (evt) => {
     evt.preventDefault();
     evt.currentTarget.scrollLeft += evt.deltaY;
