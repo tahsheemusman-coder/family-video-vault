@@ -690,18 +690,44 @@ Birthday party compilation</pre>
 
   function refreshExport() {
     const fmt = document.querySelector('input[name="expFmt"]:checked').value;
+    const withThumbs = state.videos.filter(v => v.thumbnail).length;
+
+    // Full JSON with embedded previews can be huge (tens of MB).
+    // Never dump it into the textarea — only generate for download.
+    if (fmt === 'full' && withThumbs > 0) {
+      const lean = buildExport('lean');
+      const leanKb = (lean.length / 1024).toFixed(1);
+      $('exportText').value =
+        '// Full backup with previews is too large to show here.\n' +
+        '// Click "Download .json" to save the complete file with thumbnails.\n' +
+        '// Or choose "Compact JSON" to preview / copy without images.\n\n' +
+        `// Catalog: ${state.videos.length} videos · ${withThumbs} with previews\n` +
+        `// Compact size (no previews): ~${leanKb} KB`;
+      $('exportStats').textContent =
+        `${state.videos.length} videos · ${withThumbs} with previews · use Download for full file`;
+      $('downloadExportBtn').textContent = 'Download .json (with previews)';
+      return;
+    }
+
     const text = buildExport(fmt);
     $('exportText').value = text;
-    const withThumbs = state.videos.filter(v => v.thumbnail).length;
     $('exportStats').textContent =
       `${state.videos.length} videos · ${withThumbs} with previews · ${(text.length / 1024).toFixed(1)} KB`;
     $('downloadExportBtn').textContent = fmt === 'list' ? 'Download .txt' : 'Download .json';
   }
 
   async function copyExport() {
-    const ta = $('exportText');
-    try { await navigator.clipboard.writeText(ta.value); backupMsg('Copied to clipboard.', 'ok'); return; }
+    const fmt = document.querySelector('input[name="expFmt"]:checked').value;
+    const withThumbs = state.videos.filter(v => v.thumbnail).length;
+    if (fmt === 'full' && withThumbs > 0) {
+      backupMsg('Full backup with previews is too large to copy. Use Download instead, or switch to Compact JSON.', 'err');
+      return;
+    }
+    const text = buildExport(fmt);
+    $('exportText').value = text;
+    try { await navigator.clipboard.writeText(text); backupMsg('Copied to clipboard.', 'ok'); return; }
     catch {}
+    const ta = $('exportText');
     ta.focus(); ta.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch {}
@@ -710,7 +736,8 @@ Birthday party compilation</pre>
 
   function downloadExport() {
     const fmt = document.querySelector('input[name="expFmt"]:checked').value;
-    const text = $('exportText').value;
+    // Always rebuild so "full" includes thumbnails even when textarea only shows a notice
+    const text = buildExport(fmt);
     const blob = new Blob([text], { type: fmt === 'list' ? 'text/plain' : 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -983,19 +1010,32 @@ Birthday party compilation</pre>
   }
 
   function openBackup() {
-    pendingImport = null;
-    pendingHtml = null;
-    $('importText').value = '';
-    $('importPreview').textContent = '';
-    $('htmlText').value = '';
-    $('htmlPreview').textContent = '';
-    $('runImportBtn').disabled = true;
-    $('runHtmlBtn').disabled = true;
-    $('overwriteToggle').checked = false;
-    backupMsg('');
-    setProgress(null);
-    showModal('backupModal');
-    switchTab('export');
+    try {
+      pendingImport = null;
+      pendingHtml = null;
+      $('importText').value = '';
+      $('importPreview').textContent = '';
+      $('htmlText').value = '';
+      $('htmlPreview').textContent = '';
+      $('runImportBtn').disabled = true;
+      $('runHtmlBtn').disabled = true;
+      if ($('overwriteToggle')) $('overwriteToggle').checked = false;
+      backupMsg('');
+      setProgress(null);
+      showModal('backupModal');
+      // Prefer compact view so opening Backup never freezes on large libraries
+      const fullRadio = document.querySelector('input[name="expFmt"][value="full"]');
+      const leanRadio = document.querySelector('input[name="expFmt"][value="lean"]');
+      if (leanRadio && state.videos.some(v => v.thumbnail)) {
+        leanRadio.checked = true;
+      } else if (fullRadio) {
+        fullRadio.checked = true;
+      }
+      switchTab('export');
+    } catch (e) {
+      console.error('openBackup failed', e);
+      alert('Could not open Backup. Try Compact export or refresh the page.');
+    }
   }
 
   // ---------- Events ----------
