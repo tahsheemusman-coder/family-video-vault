@@ -1132,6 +1132,12 @@ Birthday party compilation</pre>
   });
 
   // ---------- Start ----------
+    // Allow mouse wheel to scroll the tags horizontally
+  document.querySelector('.filters').addEventListener('wheel', (evt) => {
+    evt.preventDefault();
+    evt.currentTarget.scrollLeft += evt.deltaY;
+  }, { passive: false });
+  
   async function init() {
     if (tg) {
       try {
